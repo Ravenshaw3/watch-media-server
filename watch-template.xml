@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>Watch Media Server</Name>
-  <Repository>watch-media-server:latest</Repository>
+  <Repository>ravenshaw3/watch-media-server:latest</Repository>
   <Registry>https://hub.docker.com/</Registry>
   <Network>bridge</Network>
   <MyIP>192.168.1.100</MyIP>
