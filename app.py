@@ -28,6 +28,10 @@ from search_service import SearchService
 from auth_service import AuthService, require_auth, require_admin
 from pwa_service import PWAService
 from transcoding_service import TranscodingService
+from cache_service import cache_service, cached, cache_invalidate, CacheKeys
+from monitoring_service import performance_monitor, monitor_performance, track_active_requests
+from database_service import database_service
+from api_docs_service import api_docs_service
 
 # Configure logging
 logging.basicConfig(
@@ -57,6 +61,9 @@ search_service = SearchService(DATABASE_PATH)
 auth_service = AuthService(DATABASE_PATH)
 pwa_service = PWAService()
 transcoding_service = TranscodingService(DATABASE_PATH)
+
+# Initialize technical services
+app.performance_monitor = performance_monitor
 
 class MediaManager:
     def __init__(self):
@@ -1194,6 +1201,230 @@ def api_cleanup_transcodes():
     max_age = int(request.args.get('max_age_hours', 24))
     transcoding_service.cleanup_old_transcodes(max_age)
     return jsonify({'message': 'Cleanup completed'})
+
+# ===== TECHNICAL IMPROVEMENTS API ENDPOINTS =====
+
+# Performance monitoring endpoints
+@app.route('/api/monitoring/health')
+@monitor_performance
+def api_health_check():
+    """System health check endpoint"""
+    health_status = performance_monitor.get_health_status()
+    return jsonify(health_status)
+
+@app.route('/api/monitoring/performance')
+@require_auth
+@monitor_performance
+def api_performance_summary():
+    """Get performance summary"""
+    summary = performance_monitor.get_performance_summary()
+    return jsonify(summary)
+
+@app.route('/api/monitoring/metrics')
+@require_auth
+@monitor_performance
+def api_detailed_metrics():
+    """Get detailed performance metrics"""
+    hours = int(request.args.get('hours', 24))
+    metrics = performance_monitor.get_detailed_metrics(hours)
+    return jsonify(metrics)
+
+@app.route('/api/monitoring/prometheus')
+@monitor_performance
+def api_prometheus_metrics():
+    """Prometheus metrics endpoint"""
+    from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+    return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
+
+# Database management endpoints
+@app.route('/api/admin/database/stats')
+@require_auth
+@require_admin
+@monitor_performance
+def api_database_stats():
+    """Get database statistics"""
+    stats = database_service.get_database_stats()
+    return jsonify(stats)
+
+@app.route('/api/admin/database/analyze')
+@require_auth
+@require_admin
+@monitor_performance
+def api_database_analyze():
+    """Analyze database performance"""
+    analysis = database_service.analyze_database()
+    return jsonify(analysis)
+
+@app.route('/api/admin/database/vacuum', methods=['POST'])
+@require_auth
+@require_admin
+@monitor_performance
+def api_database_vacuum():
+    """Vacuum database to reclaim space"""
+    success = database_service.vacuum_database()
+    if success:
+        return jsonify({'message': 'Database vacuum completed'})
+    else:
+        return jsonify({'error': 'Database vacuum failed'}), 500
+
+@app.route('/api/admin/database/cleanup', methods=['POST'])
+@require_auth
+@require_admin
+@monitor_performance
+def api_database_cleanup():
+    """Clean up old database data"""
+    days = int(request.args.get('days', 30))
+    cleanup_stats = database_service.cleanup_old_data(days)
+    return jsonify(cleanup_stats)
+
+@app.route('/api/admin/database/backup', methods=['POST'])
+@require_auth
+@require_admin
+@monitor_performance
+def api_database_backup():
+    """Create database backup"""
+    try:
+        backup_path = database_service.backup_database()
+        return jsonify({
+            'message': 'Backup created successfully',
+            'backup_path': backup_path
+        })
+    except Exception as e:
+        return jsonify({'error': f'Backup failed: {str(e)}'}), 500
+
+@app.route('/api/admin/database/restore', methods=['POST'])
+@require_auth
+@require_admin
+@monitor_performance
+def api_database_restore():
+    """Restore database from backup"""
+    data = request.get_json()
+    backup_path = data.get('backup_path')
+    
+    if not backup_path:
+        return jsonify({'error': 'Backup path required'}), 400
+    
+    success = database_service.restore_database(backup_path)
+    if success:
+        return jsonify({'message': 'Database restored successfully'})
+    else:
+        return jsonify({'error': 'Database restore failed'}), 500
+
+# Cache management endpoints
+@app.route('/api/admin/cache/stats')
+@require_auth
+@require_admin
+@monitor_performance
+def api_cache_stats():
+    """Get cache statistics"""
+    stats = cache_service.get_stats()
+    return jsonify(stats)
+
+@app.route('/api/admin/cache/clear', methods=['POST'])
+@require_auth
+@require_admin
+@monitor_performance
+def api_cache_clear():
+    """Clear all cache data"""
+    success = cache_service.clear_all()
+    if success:
+        return jsonify({'message': 'Cache cleared successfully'})
+    else:
+        return jsonify({'error': 'Cache clear failed'}), 500
+
+@app.route('/api/admin/cache/clear-pattern', methods=['POST'])
+@require_auth
+@require_admin
+@monitor_performance
+def api_cache_clear_pattern():
+    """Clear cache by pattern"""
+    data = request.get_json()
+    pattern = data.get('pattern')
+    
+    if not pattern:
+        return jsonify({'error': 'Pattern required'}), 400
+    
+    deleted_count = cache_service.delete_pattern(pattern)
+    return jsonify({
+        'message': f'Cleared {deleted_count} cache entries',
+        'deleted_count': deleted_count
+    })
+
+# API documentation endpoints
+@app.route('/api/docs')
+@monitor_performance
+def api_docs():
+    """API documentation page"""
+    from flask import Response
+    return Response(api_docs_service.get_api_docs_html(), mimetype='text/html')
+
+@app.route('/api/docs/openapi.json')
+@monitor_performance
+def api_openapi_spec():
+    """OpenAPI specification"""
+    return jsonify(api_docs_service.get_openapi_spec())
+
+# Enhanced media endpoints with caching
+@app.route('/api/media')
+@monitor_performance
+@track_active_requests
+@cached(ttl=300, key_prefix=CacheKeys.MEDIA_LIST)  # Cache for 5 minutes
+def api_get_media_cached():
+    """Get media library with caching"""
+    media_type = request.args.get('type')
+    limit = int(request.args.get('limit', 50))
+    offset = int(request.args.get('offset', 0))
+    
+    # Use database service for optimized queries
+    query = "SELECT * FROM media_files"
+    params = []
+    
+    if media_type:
+        query += " WHERE media_type = ?"
+        params.append(media_type)
+    
+    query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
+    
+    media_files = database_service.execute_query(query, tuple(params))
+    
+    # Parse JSON fields
+    for media in media_files:
+        if media.get('genres'):
+            try:
+                media['genres'] = json.loads(media['genres']) if isinstance(media['genres'], str) else media['genres']
+            except:
+                media['genres'] = []
+    
+    return jsonify(media_files)
+
+# Enhanced search with caching
+@app.route('/api/search')
+@monitor_performance
+@track_active_requests
+@cached(ttl=600, key_prefix=CacheKeys.SEARCH_RESULTS)  # Cache for 10 minutes
+def api_search_cached():
+    """Enhanced search with caching"""
+    search_term = request.args.get('q', '')
+    media_type = request.args.get('type')
+    year_from = request.args.get('year_from')
+    year_to = request.args.get('year_to')
+    genres = request.args.get('genres')
+    rating_min = request.args.get('rating_min')
+    limit = int(request.args.get('limit', 50))
+    
+    filters = {
+        'query': search_term,
+        'media_type': media_type,
+        'year_from': int(year_from) if year_from else None,
+        'year_to': int(year_to) if year_to else None,
+        'genres': genres.split(',') if genres else None,
+        'rating_min': float(rating_min) if rating_min else None,
+        'limit': limit
+    }
+    
+    results = search_service.search_media(filters)
+    return jsonify(results)
 
 @socketio.on('connect')
 def handle_connect():
