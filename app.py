@@ -25,6 +25,9 @@ import shutil
 from tmdb_service import TMDBService
 from subtitle_service import SubtitleService
 from search_service import SearchService
+from auth_service import AuthService, require_auth, require_admin
+from pwa_service import PWAService
+from transcoding_service import TranscodingService
 
 # Configure logging
 logging.basicConfig(
@@ -51,6 +54,9 @@ MEDIA_FILES = []
 tmdb_service = TMDBService()
 subtitle_service = SubtitleService()
 search_service = SearchService(DATABASE_PATH)
+auth_service = AuthService(DATABASE_PATH)
+pwa_service = PWAService()
+transcoding_service = TranscodingService(DATABASE_PATH)
 
 class MediaManager:
     def __init__(self):
@@ -852,6 +858,342 @@ def api_saved_searches():
             return jsonify({'message': 'Search saved successfully'})
         else:
             return jsonify({'error': 'Failed to save search'}), 500
+
+# ===== GAME-CHANGING FEATURES API ENDPOINTS =====
+
+# Authentication endpoints
+@app.route('/api/auth/login', methods=['POST'])
+def api_login():
+    """User login endpoint"""
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+    
+    if not username or not password:
+        return jsonify({'error': 'Username and password required'}), 400
+    
+    user = auth_service.authenticate_user(username, password)
+    if not user:
+        return jsonify({'error': 'Invalid credentials'}), 401
+    
+    token = auth_service.generate_token(user['id'], user['username'], user['role'])
+    
+    response = jsonify({
+        'token': token,
+        'user': {
+            'id': user['id'],
+            'username': user['username'],
+            'email': user['email'],
+            'role': user['role'],
+            'preferences': user['preferences']
+        }
+    })
+    
+    # Set secure cookie
+    response.set_cookie('access_token', token, httponly=True, secure=True, samesite='Strict')
+    
+    return response
+
+@app.route('/api/auth/register', methods=['POST'])
+def api_register():
+    """User registration endpoint"""
+    data = request.get_json()
+    username = data.get('username')
+    email = data.get('email')
+    password = data.get('password')
+    
+    if not all([username, email, password]):
+        return jsonify({'error': 'Username, email, and password required'}), 400
+    
+    if len(password) < 6:
+        return jsonify({'error': 'Password must be at least 6 characters'}), 400
+    
+    user = auth_service.create_user(username, email, password)
+    if not user:
+        return jsonify({'error': 'Username or email already exists'}), 409
+    
+    token = auth_service.generate_token(user['id'], user['username'], user['role'])
+    
+    return jsonify({
+        'token': token,
+        'user': {
+            'id': user['id'],
+            'username': user['username'],
+            'email': user['email'],
+            'role': user['role']
+        }
+    })
+
+@app.route('/api/auth/logout', methods=['POST'])
+@require_auth
+def api_logout():
+    """User logout endpoint"""
+    response = jsonify({'message': 'Logged out successfully'})
+    response.set_cookie('access_token', '', expires=0)
+    return response
+
+@app.route('/api/auth/me')
+@require_auth
+def api_get_current_user():
+    """Get current user info"""
+    user_id = request.current_user['user_id']
+    user = auth_service.get_user_by_id(user_id)
+    
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    return jsonify({
+        'id': user['id'],
+        'username': user['username'],
+        'email': user['email'],
+        'role': user['role'],
+        'preferences': user['preferences'],
+        'created_at': user['created_at'],
+        'last_login': user['last_login']
+    })
+
+@app.route('/api/auth/preferences', methods=['PUT'])
+@require_auth
+def api_update_preferences():
+    """Update user preferences"""
+    user_id = request.current_user['user_id']
+    preferences = request.get_json()
+    
+    success = auth_service.update_user_preferences(user_id, preferences)
+    if success:
+        return jsonify({'message': 'Preferences updated successfully'})
+    else:
+        return jsonify({'error': 'Failed to update preferences'}), 500
+
+# Watchlist endpoints
+@app.route('/api/watchlist')
+@require_auth
+def api_get_watchlist():
+    """Get user's watchlist"""
+    user_id = request.current_user['user_id']
+    watchlist = auth_service.get_user_watchlist(user_id)
+    return jsonify(watchlist)
+
+@app.route('/api/watchlist/<int:media_id>', methods=['POST'])
+@require_auth
+def api_add_to_watchlist(media_id):
+    """Add media to watchlist"""
+    user_id = request.current_user['user_id']
+    success = auth_service.add_to_watchlist(user_id, media_id)
+    
+    if success:
+        return jsonify({'message': 'Added to watchlist'})
+    else:
+        return jsonify({'error': 'Failed to add to watchlist'}), 500
+
+@app.route('/api/watchlist/<int:media_id>', methods=['DELETE'])
+@require_auth
+def api_remove_from_watchlist(media_id):
+    """Remove media from watchlist"""
+    user_id = request.current_user['user_id']
+    success = auth_service.remove_from_watchlist(user_id, media_id)
+    
+    if success:
+        return jsonify({'message': 'Removed from watchlist'})
+    else:
+        return jsonify({'error': 'Failed to remove from watchlist'}), 500
+
+# Play history endpoints
+@app.route('/api/play-history', methods=['POST'])
+@require_auth
+def api_record_play():
+    """Record a play event"""
+    user_id = request.current_user['user_id']
+    data = request.get_json()
+    
+    media_id = data.get('media_id')
+    duration_watched = data.get('duration_watched', 0)
+    completed = data.get('completed', False)
+    
+    if not media_id:
+        return jsonify({'error': 'Media ID required'}), 400
+    
+    success = auth_service.record_play(user_id, media_id, duration_watched, completed)
+    
+    if success:
+        return jsonify({'message': 'Play recorded successfully'})
+    else:
+        return jsonify({'error': 'Failed to record play'}), 500
+
+@app.route('/api/play-history')
+@require_auth
+def api_get_play_history():
+    """Get user's play history"""
+    user_id = request.current_user['user_id']
+    limit = int(request.args.get('limit', 50))
+    
+    history = auth_service.get_user_play_history(user_id, limit)
+    return jsonify(history)
+
+@app.route('/api/continue-watching')
+@require_auth
+def api_get_continue_watching():
+    """Get user's continue watching list"""
+    user_id = request.current_user['user_id']
+    limit = int(request.args.get('limit', 20))
+    
+    continue_list = auth_service.get_continue_watching(user_id, limit)
+    return jsonify(continue_list)
+
+# Recommendations endpoint
+@app.route('/api/recommendations')
+@require_auth
+def api_get_recommendations():
+    """Get personalized recommendations"""
+    user_id = request.current_user['user_id']
+    limit = int(request.args.get('limit', 20))
+    
+    recommendations = auth_service.generate_recommendations(user_id, limit)
+    return jsonify(recommendations)
+
+# PWA endpoints
+@app.route('/manifest.json')
+def api_manifest():
+    """PWA manifest endpoint"""
+    return jsonify(pwa_service.get_manifest())
+
+@app.route('/sw.js')
+def api_service_worker():
+    """Service worker endpoint"""
+    from flask import Response
+    return Response(
+        pwa_service.service_worker_script,
+        mimetype='application/javascript'
+    )
+
+@app.route('/offline')
+def api_offline_page():
+    """Offline page endpoint"""
+    from flask import Response
+    return Response(
+        pwa_service.offline_page,
+        mimetype='text/html'
+    )
+
+# Transcoding endpoints
+@app.route('/api/transcode/<int:media_id>')
+@require_auth
+def api_start_transcode(media_id):
+    """Start transcoding for a media file"""
+    quality = request.args.get('quality', '720p')
+    
+    if quality not in transcoding_service.quality_presets:
+        return jsonify({'error': 'Invalid quality'}), 400
+    
+    # Get media file path
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT file_path FROM media_files WHERE id = ?', (media_id,))
+    result = cursor.fetchone()
+    conn.close()
+    
+    if not result:
+        return jsonify({'error': 'Media not found'}), 404
+    
+    file_path = result[0]
+    if not os.path.exists(file_path):
+        return jsonify({'error': 'Media file not found'}), 404
+    
+    # Check if already cached
+    cached_path = transcoding_service.get_cached_transcode(media_id, quality)
+    if cached_path:
+        return jsonify({
+            'status': 'completed',
+            'url': f'/api/stream/{media_id}?quality={quality}'
+        })
+    
+    # Queue transcoding
+    job_id = transcoding_service.queue_transcode(media_id, file_path, quality)
+    
+    return jsonify({
+        'job_id': job_id,
+        'status': 'queued',
+        'message': 'Transcoding queued'
+    })
+
+@app.route('/api/transcode/status/<int:job_id>')
+@require_auth
+def api_transcode_status(job_id):
+    """Get transcoding job status"""
+    status = transcoding_service.get_transcode_status(job_id)
+    return jsonify(status)
+
+@app.route('/api/transcode/qualities/<int:media_id>')
+@require_auth
+def api_get_available_qualities(media_id):
+    """Get available transcoded qualities for media"""
+    qualities = transcoding_service.get_available_qualities(media_id)
+    return jsonify(qualities)
+
+# Enhanced streaming endpoint with transcoding
+@app.route('/api/stream/<int:file_id>')
+@require_auth
+def api_stream_media_enhanced(file_id):
+    """Enhanced streaming endpoint with quality selection"""
+    quality = request.args.get('quality', '720p')
+    job_id = request.args.get('job_id')
+    
+    # Get media info
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT file_path FROM media_files WHERE id = ?', (file_id,))
+    result = cursor.fetchone()
+    conn.close()
+    
+    if not result:
+        return jsonify({'error': 'File not found'}), 404
+    
+    file_path = result[0]
+    
+    # Check for transcoded version
+    if quality != 'original':
+        cached_path = transcoding_service.get_cached_transcode(file_id, quality)
+        if cached_path:
+            file_path = cached_path
+        elif job_id:
+            # Check if transcoding is complete
+            status = transcoding_service.get_transcode_status(int(job_id))
+            if status.get('status') == 'completed' and status.get('output_path'):
+                file_path = status['output_path']
+            else:
+                return jsonify({
+                    'error': 'Transcoding in progress',
+                    'status': status.get('status'),
+                    'progress': status.get('progress', 0)
+                }), 202
+    
+    if os.path.exists(file_path):
+        # Record play
+        user_id = request.current_user['user_id']
+        auth_service.record_play(user_id, file_id)
+        
+        return send_file(file_path, as_attachment=False)
+    
+    return jsonify({'error': 'File not found'}), 404
+
+# Admin endpoints
+@app.route('/api/admin/users')
+@require_auth
+@require_admin
+def api_get_all_users():
+    """Get all users (admin only)"""
+    admin_user_id = request.current_user['user_id']
+    users = auth_service.get_all_users(admin_user_id)
+    return jsonify(users)
+
+@app.route('/api/admin/transcode/cleanup', methods=['POST'])
+@require_auth
+@require_admin
+def api_cleanup_transcodes():
+    """Clean up old transcoded files (admin only)"""
+    max_age = int(request.args.get('max_age_hours', 24))
+    transcoding_service.cleanup_old_transcodes(max_age)
+    return jsonify({'message': 'Cleanup completed'})
 
 @socketio.on('connect')
 def handle_connect():

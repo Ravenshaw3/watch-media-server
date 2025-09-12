@@ -4,6 +4,33 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Watch - Media Library</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="application-name" content="Watch">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Watch">
+    <meta name="description" content="Personal media library management and streaming">
+    <meta name="format-detection" content="telephone=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="msapplication-TileColor" content="#667eea">
+    <meta name="msapplication-tap-highlight" content="no">
+    <meta name="theme-color" content="#667eea">
+    
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" href="/static/images/icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="/static/images/icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/images/icon-180x180.png">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/images/icon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/images/icon-16x16.png">
+    <link rel="shortcut icon" href="/static/images/favicon.ico">
+    
+    <!-- Manifest -->
+    <link rel="manifest" href="/manifest.json">
+    
+    <!-- Stylesheets -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
@@ -20,6 +47,26 @@
                     <button id="settingsBtn" class="btn btn-secondary">
                         <i class="fas fa-cog"></i> Settings
                     </button>
+                    <div id="userMenu" class="user-menu" style="display: none;">
+                        <button id="userBtn" class="btn btn-secondary">
+                            <i class="fas fa-user"></i> <span id="username">User</span>
+                        </button>
+                        <div id="userDropdown" class="user-dropdown">
+                            <a href="#" id="watchlistBtn"><i class="fas fa-bookmark"></i> My Watchlist</a>
+                            <a href="#" id="historyBtn"><i class="fas fa-history"></i> Play History</a>
+                            <a href="#" id="recommendationsBtn"><i class="fas fa-magic"></i> Recommendations</a>
+                            <hr>
+                            <a href="#" id="logoutBtn"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                        </div>
+                    </div>
+                    <div id="loginSection" class="login-section">
+                        <button id="loginBtn" class="btn btn-primary">
+                            <i class="fas fa-sign-in-alt"></i> Login
+                        </button>
+                        <button id="registerBtn" class="btn btn-secondary">
+                            <i class="fas fa-user-plus"></i> Register
+                        </button>
+                    </div>
                 </div>
             </div>
         </header>
@@ -168,6 +215,91 @@
                 <li><kbd>Ctrl+S</kbd> Open settings</li>
                 <li><kbd>?</kbd> Toggle this help</li>
             </ul>
+        </div>
+        
+        <!-- Login Modal -->
+        <div id="loginModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Login</h3>
+                    <button class="modal-close" id="closeLogin">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <form id="loginForm">
+                        <div class="form-group">
+                            <label for="loginUsername">Username or Email:</label>
+                            <input type="text" id="loginUsername" name="username" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="loginPassword">Password:</label>
+                            <input type="password" id="loginPassword" name="password" required>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">Login</button>
+                            <button type="button" class="btn btn-secondary" id="cancelLogin">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Register Modal -->
+        <div id="registerModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Register</h3>
+                    <button class="modal-close" id="closeRegister">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <form id="registerForm">
+                        <div class="form-group">
+                            <label for="registerUsername">Username:</label>
+                            <input type="text" id="registerUsername" name="username" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="registerEmail">Email:</label>
+                            <input type="email" id="registerEmail" name="email" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="registerPassword">Password:</label>
+                            <input type="password" id="registerPassword" name="password" required minlength="6">
+                        </div>
+                        <div class="form-group">
+                            <label for="confirmPassword">Confirm Password:</label>
+                            <input type="password" id="confirmPassword" name="confirmPassword" required>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">Register</button>
+                            <button type="button" class="btn btn-secondary" id="cancelRegister">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- PWA Install Prompt -->
+        <div id="installPrompt" class="install-prompt" style="display: none;">
+            <div class="install-content">
+                <div class="install-icon">
+                    <i class="fas fa-download"></i>
+                </div>
+                <div class="install-text">
+                    <h3>Install Watch Media Server</h3>
+                    <p>Add to your home screen for quick access and offline viewing</p>
+                </div>
+                <div class="install-actions">
+                    <button id="installBtn" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Install
+                    </button>
+                    <button id="dismissInstall" class="btn btn-secondary">
+                        <i class="fas fa-times"></i> Not Now
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 

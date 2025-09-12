@@ -1434,3 +1434,388 @@ body {
         width: 100%;
     }
 }
+
+/* ===== GAME-CHANGING FEATURES STYLES ===== */
+
+/* Authentication Styles */
+.user-menu {
+    position: relative;
+    display: inline-block;
+}
+
+.user-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    min-width: 200px;
+    z-index: 1000;
+    display: none;
+    animation: slideDown 0.3s ease;
+}
+
+.dark-theme .user-dropdown {
+    background: #2d2d2d;
+    border-color: #404040;
+}
+
+.user-dropdown.show {
+    display: block;
+}
+
+.user-dropdown a {
+    display: block;
+    padding: 12px 16px;
+    color: #4a5568;
+    text-decoration: none;
+    transition: background-color 0.2s ease;
+    border-bottom: 1px solid #f7fafc;
+}
+
+.dark-theme .user-dropdown a {
+    color: #e0e0e0;
+    border-bottom-color: #404040;
+}
+
+.user-dropdown a:hover {
+    background: #f7fafc;
+}
+
+.dark-theme .user-dropdown a:hover {
+    background: #404040;
+}
+
+.user-dropdown a:last-child {
+    border-bottom: none;
+}
+
+.user-dropdown hr {
+    margin: 8px 0;
+    border: none;
+    border-top: 1px solid #e2e8f0;
+}
+
+.dark-theme .user-dropdown hr {
+    border-top-color: #404040;
+}
+
+.login-section {
+    display: flex;
+    gap: 10px;
+}
+
+/* PWA Install Prompt */
+.install-prompt {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    right: 20px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    animation: slideUp 0.3s ease;
+}
+
+.dark-theme .install-prompt {
+    background: #2d2d2d;
+    color: #e0e0e0;
+}
+
+.install-content {
+    display: flex;
+    align-items: center;
+    padding: 15px;
+    gap: 15px;
+}
+
+.install-icon {
+    font-size: 24px;
+    color: #667eea;
+}
+
+.install-text {
+    flex: 1;
+}
+
+.install-text h3 {
+    margin: 0 0 5px 0;
+    font-size: 16px;
+}
+
+.install-text p {
+    margin: 0;
+    font-size: 14px;
+    opacity: 0.8;
+}
+
+.install-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.install-actions .btn {
+    padding: 8px 12px;
+    font-size: 12px;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Quality Selector */
+.quality-selector {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 4px;
+    padding: 5px;
+    display: flex;
+    gap: 5px;
+}
+
+.quality-btn {
+    background: transparent;
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.quality-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.quality-btn.active {
+    background: #667eea;
+    border-color: #667eea;
+}
+
+/* Transcoding Progress */
+.transcode-progress {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    padding: 15px;
+    border-radius: 8px;
+    z-index: 1000;
+    min-width: 250px;
+    display: none;
+}
+
+.transcode-progress.show {
+    display: block;
+    animation: slideInRight 0.3s ease;
+}
+
+.transcode-progress h4 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+}
+
+.transcode-progress-bar {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.transcode-progress-fill {
+    height: 100%;
+    background: #667eea;
+    transition: width 0.3s ease;
+}
+
+.transcode-progress-text {
+    font-size: 12px;
+    opacity: 0.8;
+}
+
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Watchlist and History Sections */
+.personal-section {
+    margin-bottom: 30px;
+}
+
+.personal-section h2 {
+    font-size: 20px;
+    margin-bottom: 15px;
+    color: #2d3748;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.dark-theme .personal-section h2 {
+    color: #e0e0e0;
+}
+
+.personal-section h2 i {
+    color: #667eea;
+}
+
+/* Enhanced Media Cards with Watchlist */
+.media-card .watchlist-btn {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    opacity: 0;
+}
+
+.media-card:hover .watchlist-btn {
+    opacity: 1;
+}
+
+.media-card .watchlist-btn:hover {
+    background: #667eea;
+    transform: scale(1.1);
+}
+
+.media-card .watchlist-btn.in-watchlist {
+    background: #667eea;
+    opacity: 1;
+}
+
+/* Mobile Responsive for Game-Changing Features */
+@media (max-width: 768px) {
+    .install-prompt {
+        left: 10px;
+        right: 10px;
+        bottom: 10px;
+    }
+    
+    .install-content {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .install-actions {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .user-dropdown {
+        right: -50px;
+        min-width: 180px;
+    }
+    
+    .login-section {
+        flex-direction: column;
+        gap: 5px;
+    }
+    
+    .login-section .btn {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+    
+    .transcode-progress {
+        top: 10px;
+        right: 10px;
+        left: 10px;
+        min-width: auto;
+    }
+    
+    .quality-selector {
+        bottom: 5px;
+        left: 5px;
+        flex-wrap: wrap;
+    }
+    
+    .quality-btn {
+        font-size: 10px;
+        padding: 3px 6px;
+    }
+}
+
+@media (max-width: 480px) {
+    .header-actions {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .user-menu {
+        order: -1;
+    }
+    
+    .login-section {
+        order: -1;
+    }
+    
+    .install-actions {
+        flex-direction: column;
+    }
+    
+    .install-actions .btn {
+        width: 100%;
+    }
+}
+
+/* PWA Specific Styles */
+@media (display-mode: standalone) {
+    .header {
+        padding-top: env(safe-area-inset-top);
+    }
+    
+    .install-prompt {
+        display: none !important;
+    }
+}
+
+/* High DPI Display Support */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    .media-card .poster-image {
+        image-rendering: -webkit-optimize-contrast;
+        image-rendering: crisp-edges;
+    }
+}
+
+/* Print Styles for Game-Changing Features */
+@media print {
+    .user-menu,
+    .login-section,
+    .install-prompt,
+    .transcode-progress,
+    .quality-selector {
+        display: none !important;
+    }
+}
