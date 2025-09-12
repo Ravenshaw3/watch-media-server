@@ -35,6 +35,9 @@ from api_docs_service import api_docs_service
 from ui_components_service import ui_components_service
 from social_service import social_service
 from player_service import player_service
+from external_services_service import external_services_service
+from smart_home_service import smart_home_service
+from automation_service import automation_service
 
 # Configure logging
 logging.basicConfig(
@@ -1859,6 +1862,433 @@ def api_continue_watching():
     
     continue_list = player_service.get_continue_watching(user_id, limit)
     return jsonify(continue_list)
+
+# ============================================================================
+# INTEGRATIONS API ENDPOINTS
+# ============================================================================
+
+# External Services Integration
+@app.route('/api/integrations/external-services/auth-url/<service_name>', methods=['GET'])
+@jwt_required()
+def get_external_service_auth_url(service_name):
+    """Get OAuth authorization URL for external service"""
+    try:
+        user_id = get_jwt_identity()
+        redirect_uri = request.args.get('redirect_uri', f"{request.url_root}api/integrations/external-services/callback/{service_name}")
+        
+        auth_url = external_services_service.get_auth_url(user_id, service_name, redirect_uri)
+        
+        if auth_url:
+            return jsonify({
+                'success': True,
+                'auth_url': auth_url
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Service not supported'}), 400
+    except Exception as e:
+        logger.error(f"Error getting auth URL: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/integrations/external-services/callback/<service_name>', methods=['GET'])
+@jwt_required()
+def handle_external_service_callback(service_name):
+    """Handle OAuth callback from external service"""
+    try:
+        user_id = get_jwt_identity()
+        code = request.args.get('code')
+        state = request.args.get('state')
+        
+        if not code or not state:
+            return jsonify({'success': False, 'error': 'Missing code or state'}), 400
+        
+        success = external_services_service.handle_oauth_callback(user_id, service_name, code, state)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': f'Successfully connected to {service_name}'
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Failed to connect service'}), 400
+    except Exception as e:
+        logger.error(f"Error handling OAuth callback: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/integrations/external-services/connections', methods=['GET'])
+@jwt_required()
+def get_external_service_connections():
+    """Get user's external service connections"""
+    try:
+        user_id = get_jwt_identity()
+        connections = []
+        
+        for service_name in ['trakt', 'letterboxd', 'imdb', 'dropbox', 'google_drive', 'twitter', 'facebook', 'telegram']:
+            connection = external_services_service.get_service_connection(user_id, service_name)
+            if connection:
+                connections.append({
+                    'service_name': service_name,
+                    'connected': True,
+                    'connected_at': connection['created_at']
+                })
+            else:
+                connections.append({
+                    'service_name': service_name,
+                    'connected': False
+                })
+        
+        return jsonify({
+            'success': True,
+            'connections': connections
+        })
+    except Exception as e:
+        logger.error(f"Error getting service connections: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/integrations/external-services/sync/<service_name>', methods=['POST'])
+@jwt_required()
+def sync_external_service(service_name):
+    """Sync with external service"""
+    try:
+        user_id = get_jwt_identity()
+        
+        if service_name == 'trakt':
+            success = external_services_service.sync_with_trakt(user_id)
+        else:
+            return jsonify({'success': False, 'error': 'Service sync not implemented'}), 400
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': f'Successfully synced with {service_name}'
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Sync failed'}), 400
+    except Exception as e:
+        logger.error(f"Error syncing with {service_name}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/integrations/external-services/share/<service_name>', methods=['POST'])
+@jwt_required()
+def share_to_external_service(service_name):
+    """Share media to external service"""
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        media_id = data.get('media_id')
+        message = data.get('message')
+        
+        if not media_id:
+            return jsonify({'success': False, 'error': 'Media ID required'}), 400
+        
+        if service_name == 'twitter':
+            success = external_services_service.share_to_twitter(user_id, media_id, message)
+        else:
+            return jsonify({'success': False, 'error': 'Service sharing not implemented'}), 400
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': f'Successfully shared to {service_name}'
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Sharing failed'}), 400
+    except Exception as e:
+        logger.error(f"Error sharing to {service_name}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/integrations/external-services/webhooks', methods=['POST'])
+@jwt_required()
+def create_webhook_subscription():
+    """Create webhook subscription"""
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        
+        webhook_url = data.get('webhook_url')
+        event_types = data.get('event_types', [])
+        secret_key = data.get('secret_key')
+        
+        if not webhook_url or not event_types:
+            return jsonify({'success': False, 'error': 'Webhook URL and event types required'}), 400
+        
+        webhook_id = external_services_service.create_webhook_subscription(user_id, webhook_url, event_types, secret_key)
+        
+        if webhook_id:
+            return jsonify({
+                'success': True,
+                'webhook_id': webhook_id,
+                'message': 'Webhook subscription created'
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Failed to create webhook'}), 400
+    except Exception as e:
+        logger.error(f"Error creating webhook: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/integrations/external-services/logs', methods=['GET'])
+@jwt_required()
+def get_integration_logs():
+    """Get integration logs"""
+    try:
+        service_name = request.args.get('service_name')
+        limit = int(request.args.get('limit', 100))
+        
+        logs = external_services_service.get_integration_logs(service_name, limit)
+        
+        return jsonify({
+            'success': True,
+            'logs': logs
+        })
+    except Exception as e:
+        logger.error(f"Error getting integration logs: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# Smart Home Integration
+@app.route('/api/integrations/smart-home/devices', methods=['GET'])
+@jwt_required()
+def get_smart_home_devices():
+    """Get user's smart home devices"""
+    try:
+        user_id = get_jwt_identity()
+        platform = request.args.get('platform')
+        
+        devices = smart_home_service.get_user_devices(user_id, platform)
+        
+        return jsonify({
+            'success': True,
+            'devices': devices
+        })
+    except Exception as e:
+        logger.error(f"Error getting smart home devices: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/integrations/smart-home/devices', methods=['POST'])
+@jwt_required()
+def register_smart_home_device():
+    """Register smart home device"""
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        
+        device_name = data.get('device_name')
+        device_type = data.get('device_type')
+        device_id = data.get('device_id')
+        platform = data.get('platform')
+        device_data = data.get('device_data', {})
+        
+        if not all([device_name, device_type, device_id, platform]):
+            return jsonify({'success': False, 'error': 'Missing required fields'}), 400
+        
+        device_db_id = smart_home_service.register_device(user_id, device_name, device_type, device_id, platform, device_data)
+        
+        if device_db_id:
+            return jsonify({
+                'success': True,
+                'device_id': device_db_id,
+                'message': 'Device registered successfully'
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Failed to register device'}), 400
+    except Exception as e:
+        logger.error(f"Error registering device: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/integrations/smart-home/voice-command', methods=['POST'])
+@jwt_required()
+def handle_voice_command():
+    """Handle voice command from smart home device"""
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        
+        command_text = data.get('command_text')
+        platform = data.get('platform', 'alexa')
+        
+        if not command_text:
+            return jsonify({'success': False, 'error': 'Command text required'}), 400
+        
+        result = smart_home_service.handle_voice_command(user_id, command_text, platform)
+        
+        return jsonify({
+            'success': True,
+            'result': result
+        })
+    except Exception as e:
+        logger.error(f"Error handling voice command: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/integrations/smart-home/home-assistant/control', methods=['POST'])
+@jwt_required()
+def control_home_assistant_entity():
+    """Control Home Assistant entity"""
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        
+        entity_id = data.get('entity_id')
+        action = data.get('action')
+        parameters = data.get('parameters', {})
+        
+        if not entity_id or not action:
+            return jsonify({'success': False, 'error': 'Entity ID and action required'}), 400
+        
+        success = smart_home_service.control_home_assistant_entity(user_id, entity_id, action, parameters)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': f'Successfully executed {action} on {entity_id}'
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Failed to control entity'}), 400
+    except Exception as e:
+        logger.error(f"Error controlling Home Assistant entity: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/integrations/smart-home/philips-hue/scene', methods=['POST'])
+@jwt_required()
+def set_philips_hue_scene():
+    """Set Philips Hue scene"""
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        
+        scene_name = data.get('scene_name')
+        
+        if not scene_name:
+            return jsonify({'success': False, 'error': 'Scene name required'}), 400
+        
+        success = smart_home_service.set_philips_hue_scene(user_id, scene_name)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': f'Successfully set scene: {scene_name}'
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Failed to set scene'}), 400
+    except Exception as e:
+        logger.error(f"Error setting Philips Hue scene: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/integrations/smart-home/voice-history', methods=['GET'])
+@jwt_required()
+def get_voice_command_history():
+    """Get voice command history"""
+    try:
+        user_id = get_jwt_identity()
+        limit = int(request.args.get('limit', 50))
+        
+        history = smart_home_service.get_voice_command_history(user_id, limit)
+        
+        return jsonify({
+            'success': True,
+            'history': history
+        })
+    except Exception as e:
+        logger.error(f"Error getting voice command history: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# Automation
+@app.route('/api/integrations/automation/tasks', methods=['GET'])
+@jwt_required()
+def get_automation_tasks():
+    """Get automation tasks"""
+    try:
+        tasks = automation_service.get_automation_tasks()
+        
+        return jsonify({
+            'success': True,
+            'tasks': tasks
+        })
+    except Exception as e:
+        logger.error(f"Error getting automation tasks: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/integrations/automation/tasks', methods=['POST'])
+@jwt_required()
+def create_automation_task():
+    """Create automation task"""
+    try:
+        data = request.get_json()
+        
+        task_name = data.get('task_name')
+        task_type = data.get('task_type')
+        schedule_expression = data.get('schedule_expression')
+        task_config = data.get('task_config', {})
+        
+        if not all([task_name, task_type, schedule_expression]):
+            return jsonify({'success': False, 'error': 'Missing required fields'}), 400
+        
+        task_id = automation_service.create_automation_task(task_name, task_type, schedule_expression, task_config)
+        
+        if task_id:
+            return jsonify({
+                'success': True,
+                'task_id': task_id,
+                'message': 'Automation task created successfully'
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Failed to create task'}), 400
+    except Exception as e:
+        logger.error(f"Error creating automation task: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/integrations/automation/tasks/<int:task_id>/toggle', methods=['PUT'])
+@jwt_required()
+def toggle_automation_task(task_id):
+    """Toggle automation task"""
+    try:
+        data = request.get_json()
+        is_active = data.get('is_active', True)
+        
+        success = automation_service.toggle_task(task_id, is_active)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': f'Task {"activated" if is_active else "deactivated"} successfully'
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Failed to toggle task'}), 400
+    except Exception as e:
+        logger.error(f"Error toggling automation task: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/integrations/automation/tasks/<int:task_id>', methods=['DELETE'])
+@jwt_required()
+def delete_automation_task(task_id):
+    """Delete automation task"""
+    try:
+        success = automation_service.delete_task(task_id)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Task deleted successfully'
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Failed to delete task'}), 400
+    except Exception as e:
+        logger.error(f"Error deleting automation task: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/integrations/automation/tasks/<int:task_id>/logs', methods=['GET'])
+@jwt_required()
+def get_automation_task_logs(task_id):
+    """Get automation task logs"""
+    try:
+        limit = int(request.args.get('limit', 50))
+        
+        logs = automation_service.get_task_logs(task_id, limit)
+        
+        return jsonify({
+            'success': True,
+            'logs': logs
+        })
+    except Exception as e:
+        logger.error(f"Error getting automation task logs: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @socketio.on('connect')
 def handle_connect():
