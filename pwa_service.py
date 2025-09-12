@@ -20,9 +20,9 @@ class PWAService:
             "categories": ["entertainment", "multimedia"],
             "icons": [
                 {
-                    "src": "/static/images/icon-72x72.png",
-                    "sizes": "72x72",
-                    "type": "image/png",
+                    "src": "/static/images/icon.svg",
+                    "sizes": "any",
+                    "type": "image/svg+xml",
                     "purpose": "any"
                 },
                 {
