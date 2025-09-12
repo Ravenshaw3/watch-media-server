@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  watch:
+    build: .
+    container_name: watch-media-server
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./media:/media:ro  # Read-only media library
+      - ./data:/app/data   # Persistent data (database, logs)
+      - ./config:/app/config  # Configuration files
+    environment:
+      - MEDIA_LIBRARY_PATH=/media
+      - TZ=UTC
+    networks:
+      - watch-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/settings"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  watch-network:
+    driver: bridge
+
+volumes:
+  watch-data:
+    driver: local
