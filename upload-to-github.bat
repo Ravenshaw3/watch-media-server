@@ -44,7 +44,7 @@ echo 1. Go to GitHub.com and create a new repository named 'watch-media-server'
 echo 2. Copy the repository URL (e.g., https://github.com/username/watch-media-server.git)
 echo 3. Run the following commands:
 echo.
-echo    git remote add origin YOUR_REPOSITORY_URL
+echo    git remote add origin https://github.com/Ravenshaw3/watch-media-server
 echo    git branch -M main
 echo    git push -u origin main
 echo.
