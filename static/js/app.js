@@ -15,6 +15,7 @@ class WatchApp {
         this.setupEventListeners();
         this.setupSocketListeners();
         this.loadSettings();
+        this.loadLibraryInfo();
         this.loadMedia();
     }
     
@@ -99,9 +100,23 @@ class WatchApp {
             this.showStatus('Disconnected from server', 'error');
         });
         
+        this.socket.on('scan_status', (data) => {
+            this.updateScanProgress(data);
+        });
+        
         this.socket.on('scan_complete', (data) => {
-            this.showStatus('Library scan completed', 'success');
+            this.showScanComplete(data);
             this.loadMedia();
+            this.loadLibraryInfo();
+        });
+        
+        this.socket.on('scan_error', (data) => {
+            this.showScanError(data);
+        });
+        
+        this.socket.on('library_path_changed', (data) => {
+            this.showStatus(data.message, 'info');
+            this.loadLibraryInfo();
         });
         
         this.socket.on('status', (data) => {
@@ -348,6 +363,98 @@ class WatchApp {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+    
+    updateScanProgress(data) {
+        // Create or update progress bar
+        let progressContainer = document.getElementById('scanProgress');
+        if (!progressContainer) {
+            progressContainer = document.createElement('div');
+            progressContainer.id = 'scanProgress';
+            progressContainer.className = 'scan-progress';
+            document.querySelector('.stats-bar').appendChild(progressContainer);
+        }
+        
+        progressContainer.innerHTML = `
+            <div class="progress-info">
+                <h4>Library Scan Progress</h4>
+                <p>${data.message}</p>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: ${data.progress}%"></div>
+                </div>
+                <div class="progress-details">
+                    ${data.processed_files ? `${data.processed_files}/${data.total_files} files` : ''}
+                    ${data.current_file ? ` - Processing: ${data.current_file}` : ''}
+                </div>
+            </div>
+        `;
+        
+        // Update scan button
+        const scanBtn = document.getElementById('scanBtn');
+        if (data.status === 'scanning' || data.status === 'counting') {
+            scanBtn.disabled = true;
+            scanBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Scanning...';
+        }
+    }
+    
+    showScanComplete(data) {
+        // Remove progress bar
+        const progressContainer = document.getElementById('scanProgress');
+        if (progressContainer) {
+            progressContainer.remove();
+        }
+        
+        // Reset scan button
+        const scanBtn = document.getElementById('scanBtn');
+        scanBtn.disabled = false;
+        scanBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Scan Library';
+        
+        // Show completion message
+        this.showStatus(data.message, 'success');
+        
+        // Update stats
+        this.loadLibraryInfo();
+    }
+    
+    showScanError(data) {
+        // Remove progress bar
+        const progressContainer = document.getElementById('scanProgress');
+        if (progressContainer) {
+            progressContainer.remove();
+        }
+        
+        // Reset scan button
+        const scanBtn = document.getElementById('scanBtn');
+        scanBtn.disabled = false;
+        scanBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Scan Library';
+        
+        // Show error message
+        this.showStatus(data.message, 'error');
+    }
+    
+    async loadLibraryInfo() {
+        try {
+            const response = await fetch('/api/library/info');
+            const info = await response.json();
+            
+            // Update stats bar
+            document.getElementById('totalFiles').textContent = info.total_files;
+            document.getElementById('librarySize').textContent = `${info.total_size_gb} GB`;
+            
+            // Update library path in settings if needed
+            const libraryPathInput = document.getElementById('libraryPath');
+            if (libraryPathInput && libraryPathInput.value !== info.library_path) {
+                libraryPathInput.value = info.library_path;
+            }
+            
+            // Show warning if path doesn't exist
+            if (!info.exists) {
+                this.showStatus(`Warning: Library path does not exist: ${info.library_path}`, 'error');
+            }
+            
+        } catch (error) {
+            console.error('Error loading library info:', error);
+        }
     }
 }
 

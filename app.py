@@ -318,8 +318,71 @@ def api_get_media():
 def api_scan_library():
     """API endpoint to trigger library scan"""
     def scan_thread():
-        media_manager.scan_media_library()
-        socketio.emit('scan_complete', {'status': 'success'})
+        global SCAN_IN_PROGRESS
+        try:
+            SCAN_IN_PROGRESS = True
+            socketio.emit('scan_status', {
+                'status': 'started',
+                'message': 'Library scan started',
+                'progress': 0
+            })
+            
+            # Get current library path
+            library_path = media_manager.get_setting('library_path', MEDIA_LIBRARY_PATH)
+            
+            # Count total files first
+            supported_formats = media_manager.get_setting('supported_formats', 'mp4,avi,mkv,mov,wmv,flv,webm').split(',')
+            total_files = 0
+            processed_files = 0
+            
+            # Count files
+            for root, dirs, files in os.walk(library_path):
+                for file in files:
+                    if any(file.lower().endswith(f'.{fmt}') for fmt in supported_formats):
+                        total_files += 1
+            
+            socketio.emit('scan_status', {
+                'status': 'counting',
+                'message': f'Found {total_files} media files to scan',
+                'progress': 0,
+                'total_files': total_files
+            })
+            
+            # Scan files with progress updates
+            for root, dirs, files in os.walk(library_path):
+                for file in files:
+                    if any(file.lower().endswith(f'.{fmt}') for fmt in supported_formats):
+                        file_path = os.path.join(root, file)
+                        media_manager.add_media_file(file_path)
+                        processed_files += 1
+                        
+                        progress = int((processed_files / total_files) * 100) if total_files > 0 else 0
+                        socketio.emit('scan_status', {
+                            'status': 'scanning',
+                            'message': f'Processing {file}',
+                            'progress': progress,
+                            'processed_files': processed_files,
+                            'total_files': total_files,
+                            'current_file': file
+                        })
+            
+            socketio.emit('scan_complete', {
+                'status': 'success',
+                'message': f'Library scan completed. Processed {processed_files} files.',
+                'progress': 100,
+                'processed_files': processed_files,
+                'total_files': total_files
+            })
+            
+        except Exception as e:
+            logger.error(f"Error during library scan: {e}")
+            socketio.emit('scan_error', {
+                'status': 'error',
+                'message': f'Scan failed: {str(e)}',
+                'progress': 0
+            })
+        finally:
+            SCAN_IN_PROGRESS = False
     
     if not SCAN_IN_PROGRESS:
         threading.Thread(target=scan_thread, daemon=True).start()
@@ -341,7 +404,52 @@ def api_update_settings():
     data = request.get_json()
     for key, value in data.items():
         media_manager.set_setting(key, str(value))
+    
+    # If library path changed, trigger a rescan
+    if 'library_path' in data:
+        socketio.emit('library_path_changed', {
+            'new_path': data['library_path'],
+            'message': 'Library path updated. Consider running a new scan.'
+        })
+    
     return jsonify({'status': 'success'})
+
+@app.route('/api/scan/status')
+def api_scan_status():
+    """API endpoint to get current scan status"""
+    return jsonify({
+        'scan_in_progress': SCAN_IN_PROGRESS,
+        'library_path': media_manager.get_setting('library_path', MEDIA_LIBRARY_PATH)
+    })
+
+@app.route('/api/library/info')
+def api_library_info():
+    """API endpoint to get library information"""
+    library_path = media_manager.get_setting('library_path', MEDIA_LIBRARY_PATH)
+    supported_formats = media_manager.get_setting('supported_formats', 'mp4,avi,mkv,mov,wmv,flv,webm').split(',')
+    
+    # Count files in library
+    total_files = 0
+    total_size = 0
+    
+    try:
+        for root, dirs, files in os.walk(library_path):
+            for file in files:
+                if any(file.lower().endswith(f'.{fmt}') for fmt in supported_formats):
+                    file_path = os.path.join(root, file)
+                    if os.path.exists(file_path):
+                        total_files += 1
+                        total_size += os.path.getsize(file_path)
+    except Exception as e:
+        logger.error(f"Error getting library info: {e}")
+    
+    return jsonify({
+        'library_path': library_path,
+        'total_files': total_files,
+        'total_size_gb': round(total_size / (1024 * 1024 * 1024), 2),
+        'supported_formats': supported_formats,
+        'exists': os.path.exists(library_path)
+    })
 
 @app.route('/api/play/<int:file_id>')
 def api_play_media(file_id):
