@@ -70,8 +70,7 @@ class AutomationService:
                 destination_pattern TEXT NOT NULL,
                 file_types TEXT DEFAULT '[]',
                 is_active BOOLEAN DEFAULT 1,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (id)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         

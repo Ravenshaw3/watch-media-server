@@ -51,9 +51,9 @@ from api_docs_service import api_docs_service
 from ui_components_service import ui_components_service
 from social_service import social_service
 from player_service import player_service
-from external_services_service import external_services_service
-from smart_home_service import smart_home_service
-from automation_service import automation_service
+from external_services_service import ExternalServicesService
+from smart_home_service import SmartHomeService
+from automation_service import AutomationService
 
 # Configure logging
 logging.basicConfig(
@@ -75,14 +75,6 @@ MEDIA_LIBRARY_PATH = os.environ.get('MEDIA_LIBRARY_PATH', '/media')
 DATABASE_PATH = 'watch.db'
 SCAN_IN_PROGRESS = False
 MEDIA_FILES = []
-
-# Initialize services
-tmdb_service = TMDBService()
-subtitle_service = SubtitleService()
-search_service = SearchService(DATABASE_PATH)
-auth_service = AuthService(DATABASE_PATH)
-pwa_service = PWAService()
-transcoding_service = TranscodingService(DATABASE_PATH)
 
 # Initialize technical services
 app.performance_monitor = performance_monitor
@@ -2305,6 +2297,15 @@ def get_automation_task_logs(task_id):
     except Exception as e:
         logger.error(f"Error getting automation task logs: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+# Initialize MediaManager and services after database is ready
+media_manager = MediaManager()
+search_service = SearchService(DATABASE_PATH)
+
+# Initialize integration services
+external_services_service = ExternalServicesService(DATABASE_PATH)
+smart_home_service = SmartHomeService(DATABASE_PATH)
+automation_service = AutomationService(DATABASE_PATH)
 
 @socketio.on('connect')
 def handle_connect():

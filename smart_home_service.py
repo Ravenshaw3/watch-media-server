@@ -41,7 +41,6 @@ class SmartHomeService:
                 is_active BOOLEAN DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (id),
                 UNIQUE(user_id, device_id)
             )
         ''')
@@ -57,8 +56,7 @@ class SmartHomeService:
                 actions TEXT NOT NULL,
                 is_active BOOLEAN DEFAULT 1,
                 last_triggered TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (id)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
@@ -71,8 +69,7 @@ class SmartHomeService:
                 command_type TEXT NOT NULL,
                 parameters TEXT DEFAULT '{}',
                 response TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (id)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         

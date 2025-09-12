@@ -68,7 +68,6 @@ class ExternalServicesService:
                 is_active BOOLEAN DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (id),
                 UNIQUE(user_id, service_name)
             )
         ''')
@@ -83,8 +82,7 @@ class ExternalServicesService:
                 secret_key TEXT,
                 is_active BOOLEAN DEFAULT 1,
                 last_triggered TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (id)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
