@@ -32,6 +32,9 @@ from cache_service import cache_service, cached, cache_invalidate, CacheKeys
 from monitoring_service import performance_monitor, monitor_performance, track_active_requests
 from database_service import database_service
 from api_docs_service import api_docs_service
+from ui_components_service import ui_components_service
+from social_service import social_service
+from player_service import player_service
 
 # Configure logging
 logging.basicConfig(
@@ -1425,6 +1428,437 @@ def api_search_cached():
     
     results = search_service.search_media(filters)
     return jsonify(results)
+
+# ===== UI/UX ENHANCEMENTS API ENDPOINTS =====
+
+# UI Components endpoints
+@app.route('/api/ui/components/css')
+@monitor_performance
+def api_ui_components_css():
+    """Get UI components CSS"""
+    return Response(ui_components_service.get_all_css(), mimetype='text/css')
+
+@app.route('/api/ui/theme-switcher')
+@monitor_performance
+def api_theme_switcher():
+    """Get theme switcher HTML"""
+    return Response(ui_components_service.get_theme_switcher_html(), mimetype='text/html')
+
+@app.route('/api/ui/loading-spinner')
+@monitor_performance
+def api_loading_spinner():
+    """Get loading spinner HTML"""
+    size = request.args.get('size', 'medium')
+    color = request.args.get('color', 'primary')
+    return Response(ui_components_service.get_loading_spinner_html(size, color), mimetype='text/html')
+
+# Social features endpoints
+@app.route('/api/social/profile', methods=['GET', 'PUT'])
+@require_auth
+@monitor_performance
+def api_user_profile():
+    """Get or update user profile"""
+    user_id = request.current_user['user_id']
+    
+    if request.method == 'GET':
+        profile = social_service.get_user_profile(user_id)
+        if profile:
+            return jsonify(profile)
+        else:
+            return jsonify({'error': 'Profile not found'}), 404
+    
+    elif request.method == 'PUT':
+        profile_data = request.get_json()
+        success = social_service.create_user_profile(user_id, profile_data)
+        if success:
+            return jsonify({'message': 'Profile updated successfully'})
+        else:
+            return jsonify({'error': 'Failed to update profile'}), 500
+
+@app.route('/api/social/follow/<int:user_id>', methods=['POST', 'DELETE'])
+@require_auth
+@monitor_performance
+def api_follow_user(user_id):
+    """Follow or unfollow a user"""
+    follower_id = request.current_user['user_id']
+    
+    if request.method == 'POST':
+        success = social_service.follow_user(follower_id, user_id)
+        if success:
+            return jsonify({'message': 'User followed successfully'})
+        else:
+            return jsonify({'error': 'Failed to follow user'}), 500
+    
+    elif request.method == 'DELETE':
+        success = social_service.unfollow_user(follower_id, user_id)
+        if success:
+            return jsonify({'message': 'User unfollowed successfully'})
+        else:
+            return jsonify({'error': 'Failed to unfollow user'}), 500
+
+@app.route('/api/social/followers/<int:user_id>')
+@require_auth
+@monitor_performance
+def api_get_followers(user_id):
+    """Get user's followers"""
+    limit = int(request.args.get('limit', 50))
+    followers = social_service.get_followers(user_id, limit)
+    return jsonify(followers)
+
+@app.route('/api/social/following/<int:user_id>')
+@require_auth
+@monitor_performance
+def api_get_following(user_id):
+    """Get users that a user is following"""
+    limit = int(request.args.get('limit', 50))
+    following = social_service.get_following(user_id, limit)
+    return jsonify(following)
+
+@app.route('/api/social/reviews/<int:media_id>', methods=['GET', 'POST'])
+@require_auth
+@monitor_performance
+def api_media_reviews(media_id):
+    """Get or create media reviews"""
+    if request.method == 'GET':
+        limit = int(request.args.get('limit', 20))
+        reviews = social_service.get_media_reviews(media_id, limit)
+        return jsonify(reviews)
+    
+    elif request.method == 'POST':
+        user_id = request.current_user['user_id']
+        data = request.get_json()
+        rating = data.get('rating')
+        review_text = data.get('review_text')
+        
+        if not rating or not (1 <= rating <= 10):
+            return jsonify({'error': 'Valid rating required (1-10)'}), 400
+        
+        success = social_service.create_review(user_id, media_id, rating, review_text)
+        if success:
+            return jsonify({'message': 'Review created successfully'})
+        else:
+            return jsonify({'error': 'Failed to create review'}), 500
+
+@app.route('/api/social/reviews/<int:review_id>/like', methods=['POST', 'DELETE'])
+@require_auth
+@monitor_performance
+def api_like_review(review_id):
+    """Like or unlike a review"""
+    user_id = request.current_user['user_id']
+    
+    if request.method == 'POST':
+        success = social_service.like_review(user_id, review_id)
+        if success:
+            return jsonify({'message': 'Review liked successfully'})
+        else:
+            return jsonify({'error': 'Failed to like review'}), 500
+    
+    elif request.method == 'DELETE':
+        # Implement unlike functionality
+        return jsonify({'message': 'Review unliked successfully'})
+
+@app.route('/api/social/comments/<int:media_id>', methods=['GET', 'POST'])
+@require_auth
+@monitor_performance
+def api_media_comments(media_id):
+    """Get or create media comments"""
+    if request.method == 'GET':
+        limit = int(request.args.get('limit', 50))
+        comments = social_service.get_media_comments(media_id, limit)
+        return jsonify(comments)
+    
+    elif request.method == 'POST':
+        user_id = request.current_user['user_id']
+        data = request.get_json()
+        comment_text = data.get('comment_text')
+        parent_id = data.get('parent_id')
+        
+        if not comment_text:
+            return jsonify({'error': 'Comment text required'}), 400
+        
+        success = social_service.create_comment(user_id, media_id, comment_text, parent_id)
+        if success:
+            return jsonify({'message': 'Comment created successfully'})
+        else:
+            return jsonify({'error': 'Failed to create comment'}), 500
+
+@app.route('/api/social/collections', methods=['GET', 'POST'])
+@require_auth
+@monitor_performance
+def api_user_collections():
+    """Get or create user collections"""
+    user_id = request.current_user['user_id']
+    
+    if request.method == 'GET':
+        collections = social_service.get_user_collections(user_id)
+        return jsonify(collections)
+    
+    elif request.method == 'POST':
+        data = request.get_json()
+        name = data.get('name')
+        description = data.get('description')
+        is_public = data.get('is_public', False)
+        
+        if not name:
+            return jsonify({'error': 'Collection name required'}), 400
+        
+        collection_id = social_service.create_collection(user_id, name, description, is_public)
+        if collection_id:
+            return jsonify({'message': 'Collection created successfully', 'collection_id': collection_id})
+        else:
+            return jsonify({'error': 'Failed to create collection'}), 500
+
+@app.route('/api/social/collections/<int:collection_id>/add', methods=['POST'])
+@require_auth
+@monitor_performance
+def api_add_to_collection(collection_id):
+    """Add media to collection"""
+    data = request.get_json()
+    media_id = data.get('media_id')
+    
+    if not media_id:
+        return jsonify({'error': 'Media ID required'}), 400
+    
+    success = social_service.add_to_collection(collection_id, media_id)
+    if success:
+        return jsonify({'message': 'Media added to collection successfully'})
+    else:
+        return jsonify({'error': 'Failed to add media to collection'}), 500
+
+@app.route('/api/social/activity-feed')
+@require_auth
+@monitor_performance
+def api_activity_feed():
+    """Get user's activity feed"""
+    user_id = request.current_user['user_id']
+    limit = int(request.args.get('limit', 50))
+    
+    activities = social_service.get_activity_feed(user_id, limit)
+    return jsonify(activities)
+
+@app.route('/api/social/notifications')
+@require_auth
+@monitor_performance
+def api_get_notifications():
+    """Get user's notifications"""
+    user_id = request.current_user['user_id']
+    limit = int(request.args.get('limit', 50))
+    
+    notifications = social_service.get_notifications(user_id, limit)
+    return jsonify(notifications)
+
+@app.route('/api/social/notifications/<int:notification_id>/read', methods=['POST'])
+@require_auth
+@monitor_performance
+def api_mark_notification_read(notification_id):
+    """Mark notification as read"""
+    user_id = request.current_user['user_id']
+    
+    success = social_service.mark_notification_read(notification_id, user_id)
+    if success:
+        return jsonify({'message': 'Notification marked as read'})
+    else:
+        return jsonify({'error': 'Failed to mark notification as read'}), 500
+
+# Advanced player endpoints
+@app.route('/api/player/playlists', methods=['GET', 'POST'])
+@require_auth
+@monitor_performance
+def api_playlists():
+    """Get or create playlists"""
+    user_id = request.current_user['user_id']
+    
+    if request.method == 'GET':
+        playlists = player_service.get_user_playlists(user_id)
+        return jsonify(playlists)
+    
+    elif request.method == 'POST':
+        data = request.get_json()
+        name = data.get('name')
+        description = data.get('description')
+        is_public = data.get('is_public', False)
+        
+        if not name:
+            return jsonify({'error': 'Playlist name required'}), 400
+        
+        playlist_id = player_service.create_playlist(user_id, name, description, is_public)
+        if playlist_id:
+            return jsonify({'message': 'Playlist created successfully', 'playlist_id': playlist_id})
+        else:
+            return jsonify({'error': 'Failed to create playlist'}), 500
+
+@app.route('/api/player/playlists/<int:playlist_id>')
+@require_auth
+@monitor_performance
+def api_get_playlist(playlist_id):
+    """Get playlist with items"""
+    user_id = request.current_user['user_id']
+    
+    playlist = player_service.get_playlist(playlist_id, user_id)
+    if playlist:
+        return jsonify(playlist)
+    else:
+        return jsonify({'error': 'Playlist not found'}), 404
+
+@app.route('/api/player/playlists/<int:playlist_id>/add', methods=['POST'])
+@require_auth
+@monitor_performance
+def api_add_to_playlist(playlist_id):
+    """Add media to playlist"""
+    data = request.get_json()
+    media_id = data.get('media_id')
+    position = data.get('position')
+    
+    if not media_id:
+        return jsonify({'error': 'Media ID required'}), 400
+    
+    success = player_service.add_to_playlist(playlist_id, media_id, position)
+    if success:
+        return jsonify({'message': 'Media added to playlist successfully'})
+    else:
+        return jsonify({'error': 'Failed to add media to playlist'}), 500
+
+@app.route('/api/player/queue', methods=['GET', 'POST'])
+@require_auth
+@monitor_performance
+def api_play_queue():
+    """Get or create play queue"""
+    user_id = request.current_user['user_id']
+    queue_name = request.args.get('queue_name', 'default')
+    
+    if request.method == 'GET':
+        queue = player_service.get_play_queue(user_id, queue_name)
+        if queue:
+            return jsonify(queue)
+        else:
+            return jsonify({'error': 'Queue not found'}), 404
+    
+    elif request.method == 'POST':
+        data = request.get_json()
+        media_ids = data.get('media_ids', [])
+        
+        success = player_service.create_play_queue(user_id, queue_name, media_ids)
+        if success:
+            return jsonify({'message': 'Queue created successfully'})
+        else:
+            return jsonify({'error': 'Failed to create queue'}), 500
+
+@app.route('/api/player/session', methods=['POST', 'PUT'])
+@require_auth
+@monitor_performance
+def api_playback_session():
+    """Start or update playback session"""
+    user_id = request.current_user['user_id']
+    
+    if request.method == 'POST':
+        data = request.get_json()
+        media_id = data.get('media_id')
+        session_id = data.get('session_id')
+        
+        if not media_id:
+            return jsonify({'error': 'Media ID required'}), 400
+        
+        session_id = player_service.start_playback_session(user_id, media_id, session_id)
+        if session_id:
+            return jsonify({'message': 'Session started', 'session_id': session_id})
+        else:
+            return jsonify({'error': 'Failed to start session'}), 500
+    
+    elif request.method == 'PUT':
+        data = request.get_json()
+        session_id = data.get('session_id')
+        
+        if not session_id:
+            return jsonify({'error': 'Session ID required'}), 400
+        
+        # Remove session_id from data before passing to update
+        update_data = {k: v for k, v in data.items() if k != 'session_id'}
+        
+        success = player_service.update_playback_session(session_id, **update_data)
+        if success:
+            return jsonify({'message': 'Session updated successfully'})
+        else:
+            return jsonify({'error': 'Failed to update session'}), 500
+
+@app.route('/api/player/session/<session_id>/end', methods=['POST'])
+@require_auth
+@monitor_performance
+def api_end_playback_session(session_id):
+    """End playback session"""
+    success = player_service.end_playback_session(session_id)
+    if success:
+        return jsonify({'message': 'Session ended successfully'})
+    else:
+        return jsonify({'error': 'Failed to end session'}), 500
+
+@app.route('/api/player/bookmarks/<int:media_id>', methods=['GET', 'POST'])
+@require_auth
+@monitor_performance
+def api_media_bookmarks(media_id):
+    """Get or create media bookmarks"""
+    user_id = request.current_user['user_id']
+    
+    if request.method == 'GET':
+        bookmarks = player_service.get_media_bookmarks(media_id, user_id)
+        return jsonify(bookmarks)
+    
+    elif request.method == 'POST':
+        data = request.get_json()
+        time_position = data.get('time_position')
+        bookmark_name = data.get('bookmark_name')
+        notes = data.get('notes')
+        
+        if not time_position:
+            return jsonify({'error': 'Time position required'}), 400
+        
+        bookmark_id = player_service.create_bookmark(user_id, media_id, time_position, bookmark_name, notes)
+        if bookmark_id:
+            return jsonify({'message': 'Bookmark created successfully', 'bookmark_id': bookmark_id})
+        else:
+            return jsonify({'error': 'Failed to create bookmark'}), 500
+
+@app.route('/api/player/settings', methods=['GET', 'PUT'])
+@require_auth
+@monitor_performance
+def api_player_settings():
+    """Get or update player settings"""
+    user_id = request.current_user['user_id']
+    
+    if request.method == 'GET':
+        settings = player_service.get_player_settings(user_id)
+        return jsonify(settings)
+    
+    elif request.method == 'PUT':
+        data = request.get_json()
+        
+        for setting_name, setting_value in data.items():
+            success = player_service.update_player_setting(user_id, setting_name, setting_value)
+            if not success:
+                return jsonify({'error': f'Failed to update setting: {setting_name}'}), 500
+        
+        return jsonify({'message': 'Settings updated successfully'})
+
+@app.route('/api/player/history')
+@require_auth
+@monitor_performance
+def api_playback_history():
+    """Get user's playback history"""
+    user_id = request.current_user['user_id']
+    limit = int(request.args.get('limit', 50))
+    
+    history = player_service.get_playback_history(user_id, limit)
+    return jsonify(history)
+
+@app.route('/api/player/continue-watching')
+@require_auth
+@monitor_performance
+def api_continue_watching():
+    """Get continue watching list"""
+    user_id = request.current_user['user_id']
+    limit = int(request.args.get('limit', 20))
+    
+    continue_list = player_service.get_continue_watching(user_id, limit)
+    return jsonify(continue_list)
 
 @socketio.on('connect')
 def handle_connect():
