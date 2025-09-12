@@ -5,9 +5,16 @@ import time
 import hashlib
 from typing import Any, Optional, Dict, List
 from functools import wraps
-import redis
 from flask import current_app, request
 import logging
+
+# Optional Redis import
+try:
+    import redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    redis = None
 
 logger = logging.getLogger(__name__)
 
@@ -15,14 +22,14 @@ class CacheService:
     def __init__(self, redis_url: str = None):
         self.redis_url = redis_url or os.getenv('REDIS_URL', 'redis://localhost:6379/0')
         self.redis_client = None
-        self.cache_enabled = os.getenv('CACHE_ENABLED', 'true').lower() == 'true'
+        self.cache_enabled = os.getenv('CACHE_ENABLED', 'true').lower() == 'true' and REDIS_AVAILABLE
         self.default_ttl = int(os.getenv('CACHE_DEFAULT_TTL', '3600'))  # 1 hour
         self.connect()
     
     def connect(self):
         """Connect to Redis server"""
-        if not self.cache_enabled:
-            logger.info("Caching disabled")
+        if not self.cache_enabled or not REDIS_AVAILABLE:
+            logger.info("Caching disabled - Redis not available")
             return
         
         try:

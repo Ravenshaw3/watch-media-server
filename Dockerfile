@@ -17,6 +17,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application files
 COPY . .
 
+# Copy Docker environment file
+COPY env.docker .env
+
 # Create media directory
 RUN mkdir -p /media
 

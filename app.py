@@ -28,7 +28,23 @@ from search_service import SearchService
 from auth_service import AuthService, require_auth, require_admin
 from pwa_service import PWAService
 from transcoding_service import TranscodingService
-from cache_service import cache_service, cached, cache_invalidate, CacheKeys
+# Import cache service with error handling
+try:
+    from cache_service import cache_service, cached, cache_invalidate, CacheKeys
+    CACHE_AVAILABLE = True
+except Exception as e:
+    logger.warning(f"Cache service not available: {e}")
+    CACHE_AVAILABLE = False
+    # Create dummy decorators
+    def cached(*args, **kwargs):
+        def decorator(f):
+            return f
+        return decorator
+    def cache_invalidate(*args, **kwargs):
+        pass
+    class CacheKeys:
+        MEDIA_LIST = "media_list"
+        SEARCH_RESULTS = "search_results"
 from monitoring_service import performance_monitor, monitor_performance, track_active_requests
 from database_service import database_service
 from api_docs_service import api_docs_service
