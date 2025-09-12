@@ -21,6 +21,11 @@ import time
 import subprocess
 import shutil
 
+# Import our new services
+from tmdb_service import TMDBService
+from subtitle_service import SubtitleService
+from search_service import SearchService
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -41,6 +46,11 @@ MEDIA_LIBRARY_PATH = os.environ.get('MEDIA_LIBRARY_PATH', '/media')
 DATABASE_PATH = 'watch.db'
 SCAN_IN_PROGRESS = False
 MEDIA_FILES = []
+
+# Initialize services
+tmdb_service = TMDBService()
+subtitle_service = SubtitleService()
+search_service = SearchService(DATABASE_PATH)
 
 class MediaManager:
     def __init__(self):
@@ -73,9 +83,21 @@ class MediaManager:
                 play_count INTEGER DEFAULT 0,
                 rating REAL,
                 tags TEXT,
-                metadata TEXT  -- JSON string for additional metadata
+                metadata TEXT,  -- JSON string for additional metadata
+                poster_url TEXT,
+                backdrop_url TEXT,
+                overview TEXT,
+                genres TEXT,  -- JSON array of genres
+                runtime INTEGER,
+                release_date TEXT,
+                imdb_id TEXT,
+                tmdb_id INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        
+        # Add new columns if they don't exist (for existing databases)
+        self.migrate_database()
         
         # Library settings table
         cursor.execute('''
@@ -105,6 +127,62 @@ class MediaManager:
         conn.commit()
         conn.close()
         logger.info("Database initialized successfully")
+    
+    def migrate_database(self):
+        """Migrate database schema for new features"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # Get current columns
+        cursor.execute("PRAGMA table_info(media_files)")
+        columns = [column[1] for column in cursor.fetchall()]
+        
+        # Add new columns if they don't exist
+        new_columns = [
+            ('poster_url', 'TEXT'),
+            ('backdrop_url', 'TEXT'),
+            ('overview', 'TEXT'),
+            ('genres', 'TEXT'),
+            ('runtime', 'INTEGER'),
+            ('release_date', 'TEXT'),
+            ('imdb_id', 'TEXT'),
+            ('tmdb_id', 'INTEGER'),
+            ('created_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+        ]
+        
+        for column_name, column_type in new_columns:
+            if column_name not in columns:
+                try:
+                    cursor.execute(f"ALTER TABLE media_files ADD COLUMN {column_name} {column_type}")
+                    print(f"Added column {column_name} to media_files table")
+                except sqlite3.Error as e:
+                    print(f"Error adding column {column_name}: {e}")
+        
+        # Create saved_searches table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS saved_searches (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                search_term TEXT,
+                filters TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Create subtitles table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS subtitles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                media_id INTEGER,
+                file_path TEXT,
+                language TEXT,
+                format TEXT,
+                FOREIGN KEY (media_id) REFERENCES media_files (id)
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
     
     def get_setting(self, key, default=None):
         """Get a setting value from the database"""
@@ -484,6 +562,296 @@ def api_stream_media(file_id):
             return send_file(file_path, as_attachment=False)
     
     return jsonify({'error': 'File not found'}), 404
+
+# ===== HIGH-IMPACT FEATURES API ENDPOINTS =====
+
+@app.route('/api/search')
+def api_search():
+    """Advanced search endpoint"""
+    search_term = request.args.get('q', '')
+    filters = {}
+    
+    # Parse filters from query parameters
+    if request.args.get('year_start'):
+        filters['year_range'] = [int(request.args.get('year_start')), None]
+    if request.args.get('year_end'):
+        if 'year_range' not in filters:
+            filters['year_range'] = [None, int(request.args.get('year_end'))]
+        else:
+            filters['year_range'][1] = int(request.args.get('year_end'))
+    
+    if request.args.get('genres'):
+        filters['genres'] = request.args.get('genres').split(',')
+    
+    if request.args.get('rating_min'):
+        filters['rating_min'] = float(request.args.get('rating_min'))
+    if request.args.get('rating_max'):
+        filters['rating_max'] = float(request.args.get('rating_max'))
+    
+    if request.args.get('media_type'):
+        filters['media_type'] = request.args.get('media_type')
+    
+    if request.args.get('has_subtitles'):
+        filters['has_subtitles'] = request.args.get('has_subtitles').lower() == 'true'
+    
+    if request.args.get('has_poster'):
+        filters['has_poster'] = request.args.get('has_poster').lower() == 'true'
+    
+    sort_by = request.args.get('sort_by', 'title')
+    sort_order = request.args.get('sort_order', 'ASC')
+    limit = int(request.args.get('limit', 50))
+    offset = int(request.args.get('offset', 0))
+    
+    results = search_service.search_media(search_term, filters, sort_by, sort_order, limit, offset)
+    return jsonify(results)
+
+@app.route('/api/search/suggestions')
+def api_search_suggestions():
+    """Get search suggestions"""
+    query = request.args.get('q', '')
+    limit = int(request.args.get('limit', 10))
+    
+    suggestions = search_service.get_search_suggestions(query, limit)
+    return jsonify(suggestions)
+
+@app.route('/api/recently-added')
+def api_recently_added():
+    """Get recently added media"""
+    days = int(request.args.get('days', 7))
+    limit = int(request.args.get('limit', 20))
+    
+    results = search_service.get_recently_added(days, limit)
+    return jsonify(results)
+
+@app.route('/api/trending')
+def api_trending():
+    """Get trending media"""
+    days = int(request.args.get('days', 30))
+    limit = int(request.args.get('limit', 20))
+    
+    results = search_service.get_trending_media(days, limit)
+    return jsonify(results)
+
+@app.route('/api/continue-watching')
+def api_continue_watching():
+    """Get continue watching list"""
+    limit = int(request.args.get('limit', 20))
+    
+    results = search_service.get_continue_watching(limit)
+    return jsonify(results)
+
+@app.route('/api/recommendations/<int:media_id>')
+def api_recommendations(media_id):
+    """Get recommendations for a media item"""
+    limit = int(request.args.get('limit', 10))
+    
+    results = search_service.get_recommendations(media_id, limit)
+    return jsonify(results)
+
+@app.route('/api/search/filters')
+def api_search_filters():
+    """Get available search filters"""
+    filters = search_service.get_search_filters()
+    return jsonify(filters)
+
+@app.route('/api/subtitles/<int:media_id>')
+def api_get_subtitles(media_id):
+    """Get subtitles for a media file"""
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT file_path FROM media_files WHERE id = ?', (media_id,))
+    result = cursor.fetchone()
+    conn.close()
+    
+    if not result:
+        return jsonify({'error': 'Media not found'}), 404
+    
+    file_path = result[0]
+    subtitles = subtitle_service.find_subtitles(file_path)
+    return jsonify(subtitles)
+
+@app.route('/api/subtitle/<path:filename>')
+def api_get_subtitle(filename):
+    """Get subtitle file content"""
+    # Find the subtitle file
+    subtitle_path = None
+    for root, dirs, files in os.walk(MEDIA_LIBRARY_PATH):
+        if filename in files:
+            subtitle_path = os.path.join(root, filename)
+            break
+    
+    if not subtitle_path or not os.path.exists(subtitle_path):
+        return jsonify({'error': 'Subtitle not found'}), 404
+    
+    format_type = request.args.get('format', 'vtt')
+    content = subtitle_service.get_subtitle_content(subtitle_path, format_type)
+    
+    if format_type == 'vtt':
+        return content, 200, {'Content-Type': 'text/vtt; charset=utf-8'}
+    else:
+        return content, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+
+@app.route('/api/metadata/<int:media_id>')
+def api_get_metadata(media_id):
+    """Get or update metadata for a media file"""
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM media_files WHERE id = ?', (media_id,))
+    result = cursor.fetchone()
+    conn.close()
+    
+    if not result:
+        return jsonify({'error': 'Media not found'}), 404
+    
+    # Get current metadata
+    media_data = dict(zip([desc[0] for desc in cursor.description], result))
+    
+    # If requested, fetch fresh metadata from TMDB
+    if request.args.get('refresh') == 'true':
+        file_path = media_data['file_path']
+        media_type = media_data.get('media_type', 'movie')
+        
+        # Get metadata from TMDB
+        metadata = tmdb_service.get_media_metadata(file_path, media_type)
+        
+        # Update database
+        conn = sqlite3.connect(DATABASE_PATH)
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE media_files SET 
+                title = ?, poster_url = ?, backdrop_url = ?, overview = ?,
+                rating = ?, genres = ?, runtime = ?, release_date = ?,
+                imdb_id = ?, tmdb_id = ?
+            WHERE id = ?
+        """, (
+            metadata['title'], metadata['poster_url'], metadata['backdrop_url'],
+            metadata['overview'], metadata['rating'], json.dumps(metadata['genres']),
+            metadata['runtime'], metadata['release_date'], metadata['imdb_id'],
+            metadata['tmdb_id'], media_id
+        ))
+        conn.commit()
+        conn.close()
+        
+        # Update media_data with new metadata
+        media_data.update(metadata)
+    
+    return jsonify(media_data)
+
+@app.route('/api/bulk/update-metadata', methods=['POST'])
+def api_bulk_update_metadata():
+    """Bulk update metadata for multiple media files"""
+    data = request.get_json()
+    media_ids = data.get('media_ids', [])
+    
+    if not media_ids:
+        return jsonify({'error': 'No media IDs provided'}), 400
+    
+    updated_count = 0
+    errors = []
+    
+    for media_id in media_ids:
+        try:
+            conn = sqlite3.connect(DATABASE_PATH)
+            cursor = conn.cursor()
+            cursor.execute('SELECT file_path, media_type FROM media_files WHERE id = ?', (media_id,))
+            result = cursor.fetchone()
+            
+            if result:
+                file_path, media_type = result
+                metadata = tmdb_service.get_media_metadata(file_path, media_type)
+                
+                cursor.execute("""
+                    UPDATE media_files SET 
+                        title = ?, poster_url = ?, backdrop_url = ?, overview = ?,
+                        rating = ?, genres = ?, runtime = ?, release_date = ?,
+                        imdb_id = ?, tmdb_id = ?
+                    WHERE id = ?
+                """, (
+                    metadata['title'], metadata['poster_url'], metadata['backdrop_url'],
+                    metadata['overview'], metadata['rating'], json.dumps(metadata['genres']),
+                    metadata['runtime'], metadata['release_date'], metadata['imdb_id'],
+                    metadata['tmdb_id'], media_id
+                ))
+                conn.commit()
+                updated_count += 1
+            else:
+                errors.append(f"Media ID {media_id} not found")
+            
+            conn.close()
+            
+        except Exception as e:
+            errors.append(f"Error updating media ID {media_id}: {str(e)}")
+    
+    return jsonify({
+        'updated_count': updated_count,
+        'errors': errors
+    })
+
+@app.route('/api/bulk/delete', methods=['POST'])
+def api_bulk_delete():
+    """Bulk delete media files"""
+    data = request.get_json()
+    media_ids = data.get('media_ids', [])
+    delete_files = data.get('delete_files', False)
+    
+    if not media_ids:
+        return jsonify({'error': 'No media IDs provided'}), 400
+    
+    deleted_count = 0
+    errors = []
+    
+    for media_id in media_ids:
+        try:
+            conn = sqlite3.connect(DATABASE_PATH)
+            cursor = conn.cursor()
+            cursor.execute('SELECT file_path FROM media_files WHERE id = ?', (media_id,))
+            result = cursor.fetchone()
+            
+            if result:
+                file_path = result[0]
+                
+                # Delete file if requested
+                if delete_files and os.path.exists(file_path):
+                    os.remove(file_path)
+                
+                # Remove from database
+                cursor.execute('DELETE FROM media_files WHERE id = ?', (media_id,))
+                conn.commit()
+                deleted_count += 1
+            else:
+                errors.append(f"Media ID {media_id} not found")
+            
+            conn.close()
+            
+        except Exception as e:
+            errors.append(f"Error deleting media ID {media_id}: {str(e)}")
+    
+    return jsonify({
+        'deleted_count': deleted_count,
+        'errors': errors
+    })
+
+@app.route('/api/saved-searches', methods=['GET', 'POST'])
+def api_saved_searches():
+    """Manage saved searches"""
+    if request.method == 'GET':
+        searches = search_service.get_saved_searches()
+        return jsonify(searches)
+    
+    elif request.method == 'POST':
+        data = request.get_json()
+        name = data.get('name')
+        search_term = data.get('search_term', '')
+        filters = data.get('filters', {})
+        
+        if not name:
+            return jsonify({'error': 'Search name is required'}), 400
+        
+        success = search_service.save_search(name, search_term, filters)
+        if success:
+            return jsonify({'message': 'Search saved successfully'})
+        else:
+            return jsonify({'error': 'Failed to save search'}), 500
 
 @socketio.on('connect')
 def handle_connect():

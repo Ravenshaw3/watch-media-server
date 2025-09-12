@@ -7,6 +7,9 @@ class WatchApp {
         this.itemsPerPage = 20;
         this.searchQuery = '';
         this.mediaData = [];
+        this.searchFilters = {};
+        this.selectedMedia = new Set();
+        this.viewMode = 'grid'; // 'grid' or 'list'
         
         this.init();
     }
@@ -658,6 +661,312 @@ class WatchApp {
                 <p>${message}</p>
             </div>
         `;
+    }
+    
+    // ===== HIGH-IMPACT FEATURES =====
+    
+    async loadRecentlyAdded() {
+        try {
+            const response = await fetch('/api/recently-added?limit=20');
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('Error loading recently added:', error);
+            return [];
+        }
+    }
+    
+    async loadTrending() {
+        try {
+            const response = await fetch('/api/trending?limit=20');
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('Error loading trending:', error);
+            return [];
+        }
+    }
+    
+    async loadContinueWatching() {
+        try {
+            const response = await fetch('/api/continue-watching?limit=20');
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('Error loading continue watching:', error);
+            return [];
+        }
+    }
+    
+    async performAdvancedSearch(searchTerm = '', filters = {}) {
+        try {
+            const params = new URLSearchParams();
+            if (searchTerm) params.append('q', searchTerm);
+            
+            // Add filters to params
+            Object.keys(filters).forEach(key => {
+                if (filters[key] !== null && filters[key] !== undefined && filters[key] !== '') {
+                    if (Array.isArray(filters[key])) {
+                        params.append(key, filters[key].join(','));
+                    } else {
+                        params.append(key, filters[key]);
+                    }
+                }
+            });
+            
+            const response = await fetch(`/api/search?${params}`);
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('Error performing advanced search:', error);
+            return [];
+        }
+    }
+    
+    async getSearchSuggestions(query) {
+        try {
+            const response = await fetch(`/api/search/suggestions?q=${encodeURIComponent(query)}&limit=10`);
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('Error getting search suggestions:', error);
+            return [];
+        }
+    }
+    
+    async getSubtitles(mediaId) {
+        try {
+            const response = await fetch(`/api/subtitles/${mediaId}`);
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('Error getting subtitles:', error);
+            return [];
+        }
+    }
+    
+    async updateMetadata(mediaId, refresh = false) {
+        try {
+            const url = refresh ? `/api/metadata/${mediaId}?refresh=true` : `/api/metadata/${mediaId}`;
+            const response = await fetch(url);
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('Error updating metadata:', error);
+            return null;
+        }
+    }
+    
+    async bulkUpdateMetadata(mediaIds) {
+        try {
+            const response = await fetch('/api/bulk/update-metadata', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ media_ids: mediaIds })
+            });
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('Error bulk updating metadata:', error);
+            return { updated_count: 0, errors: [error.message] };
+        }
+    }
+    
+    async bulkDelete(mediaIds, deleteFiles = false) {
+        try {
+            const response = await fetch('/api/bulk/delete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ 
+                    media_ids: mediaIds,
+                    delete_files: deleteFiles
+                })
+            });
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('Error bulk deleting:', error);
+            return { deleted_count: 0, errors: [error.message] };
+        }
+    }
+    
+    // Enhanced media card with poster support
+    createEnhancedMediaCard(media) {
+        const typeClass = media.media_type === 'movie' ? 'movie' : 'tv_show';
+        const typeIcon = media.media_type === 'movie' ? 'fas fa-film' : 'fas fa-tv';
+        const fileSize = this.formatFileSize(media.file_size);
+        const resumePosition = this.getResumePosition(media.id);
+        const hasResume = resumePosition > 0;
+        const hasPoster = media.poster_url && media.poster_url.trim() !== '';
+        const rating = media.rating ? media.rating.toFixed(1) : 'N/A';
+        const genres = media.genres ? (Array.isArray(media.genres) ? media.genres : JSON.parse(media.genres)) : [];
+        
+        return `
+            <div class="media-card enhanced" data-media-id="${media.id}">
+                <div class="media-poster">
+                    ${hasPoster ? 
+                        `<img src="${media.poster_url}" alt="${media.title}" class="poster-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                         <div class="poster-fallback" style="display: none;">
+                             <i class="${typeIcon}"></i>
+                         </div>` :
+                        `<div class="poster-fallback">
+                             <i class="${typeIcon}"></i>
+                         </div>`
+                    }
+                    ${hasResume ? '<div class="resume-indicator"><i class="fas fa-play-circle"></i></div>' : ''}
+                    ${media.rating ? `<div class="rating-badge">${rating}</div>` : ''}
+                    <div class="media-overlay">
+                        <button class="btn btn-primary btn-sm" onclick="app.playMedia(${media.id})">
+                            <i class="fas fa-${hasResume ? 'play-circle' : 'play'}"></i>
+                        </button>
+                        <button class="btn btn-secondary btn-sm" onclick="app.showMediaDetails(${media.id})">
+                            <i class="fas fa-info-circle"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="media-info">
+                    <h3 class="media-title">${this.escapeHtml(media.title || media.file_name)}</h3>
+                    <div class="media-meta">
+                        <span class="media-type ${typeClass}">${media.media_type}</span>
+                        <span class="file-size">${fileSize}</span>
+                        ${media.year ? `<span class="year">${media.year}</span>` : ''}
+                    </div>
+                    ${genres.length > 0 ? `<div class="genres">${genres.slice(0, 3).map(g => `<span class="genre-tag">${g}</span>`).join('')}</div>` : ''}
+                    ${hasResume ? `<div class="resume-text">Resume at ${Math.floor(resumePosition / 60)}:${(resumePosition % 60).toString().padStart(2, '0')}</div>` : ''}
+                    <div class="media-actions">
+                        <button class="btn btn-primary" onclick="app.playMedia(${media.id})">
+                            <i class="fas fa-${hasResume ? 'play-circle' : 'play'}"></i> 
+                            ${hasResume ? 'Resume' : 'Play'}
+                        </button>
+                        <button class="btn btn-secondary" onclick="app.streamMedia(${media.id})">
+                            <i class="fas fa-download"></i>
+                        </button>
+                        <button class="btn btn-secondary" onclick="app.toggleMediaSelection(${media.id})">
+                            <i class="fas fa-check"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    toggleMediaSelection(mediaId) {
+        if (this.selectedMedia.has(mediaId)) {
+            this.selectedMedia.delete(mediaId);
+        } else {
+            this.selectedMedia.add(mediaId);
+        }
+        this.updateSelectionUI();
+    }
+    
+    updateSelectionUI() {
+        const selectedCount = this.selectedMedia.size;
+        const bulkActions = document.getElementById('bulkActions');
+        
+        if (selectedCount > 0) {
+            if (!bulkActions) {
+                this.createBulkActionsPanel();
+            }
+            document.getElementById('selectedCount').textContent = selectedCount;
+        } else {
+            if (bulkActions) {
+                bulkActions.remove();
+            }
+        }
+    }
+    
+    createBulkActionsPanel() {
+        const bulkActions = document.createElement('div');
+        bulkActions.id = 'bulkActions';
+        bulkActions.className = 'bulk-actions';
+        bulkActions.innerHTML = `
+            <div class="bulk-actions-content">
+                <span id="selectedCount">0</span> items selected
+                <div class="bulk-buttons">
+                    <button class="btn btn-primary" onclick="app.bulkUpdateMetadataSelected()">
+                        <i class="fas fa-sync"></i> Update Metadata
+                    </button>
+                    <button class="btn btn-warning" onclick="app.bulkDeleteSelected(false)">
+                        <i class="fas fa-trash"></i> Remove from Library
+                    </button>
+                    <button class="btn btn-danger" onclick="app.bulkDeleteSelected(true)">
+                        <i class="fas fa-trash-alt"></i> Delete Files
+                    </button>
+                    <button class="btn btn-secondary" onclick="app.clearSelection()">
+                        <i class="fas fa-times"></i> Clear
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.querySelector('.main').insertBefore(bulkActions, document.getElementById('mediaGrid'));
+    }
+    
+    clearSelection() {
+        this.selectedMedia.clear();
+        this.updateSelectionUI();
+        // Remove selection styling from cards
+        document.querySelectorAll('.media-card.selected').forEach(card => {
+            card.classList.remove('selected');
+        });
+    }
+    
+    async bulkUpdateMetadataSelected() {
+        if (this.selectedMedia.size === 0) return;
+        
+        const mediaIds = Array.from(this.selectedMedia);
+        this.showStatus('Updating metadata...', 'info');
+        
+        const result = await this.bulkUpdateMetadata(mediaIds);
+        
+        if (result.updated_count > 0) {
+            this.showStatus(`Updated metadata for ${result.updated_count} items`, 'success');
+            this.loadMedia(); // Refresh the view
+        }
+        
+        if (result.errors.length > 0) {
+            this.showStatus(`Errors: ${result.errors.join(', ')}`, 'error');
+        }
+        
+        this.clearSelection();
+    }
+    
+    async bulkDeleteSelected(deleteFiles = false) {
+        if (this.selectedMedia.size === 0) return;
+        
+        const action = deleteFiles ? 'delete files' : 'remove from library';
+        if (!confirm(`Are you sure you want to ${action} for ${this.selectedMedia.size} items?`)) {
+            return;
+        }
+        
+        const mediaIds = Array.from(this.selectedMedia);
+        this.showStatus(`${deleteFiles ? 'Deleting' : 'Removing'} items...`, 'info');
+        
+        const result = await this.bulkDelete(mediaIds, deleteFiles);
+        
+        if (result.deleted_count > 0) {
+            this.showStatus(`${deleteFiles ? 'Deleted' : 'Removed'} ${result.deleted_count} items`, 'success');
+            this.loadMedia(); // Refresh the view
+        }
+        
+        if (result.errors.length > 0) {
+            this.showStatus(`Errors: ${result.errors.join(', ')}`, 'error');
+        }
+        
+        this.clearSelection();
+    }
+    
+    showMediaDetails(mediaId) {
+        // This would open a detailed modal with full metadata
+        // For now, just show a simple alert
+        const media = this.mediaData.find(m => m.id === mediaId);
+        if (media) {
+            alert(`Media Details:\nTitle: ${media.title}\nType: ${media.media_type}\nRating: ${media.rating || 'N/A'}\nOverview: ${media.overview || 'No overview available'}`);
+        }
     }
 }
 
