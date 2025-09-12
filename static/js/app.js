@@ -14,6 +14,9 @@ class WatchApp {
     init() {
         this.setupEventListeners();
         this.setupSocketListeners();
+        this.setupKeyboardShortcuts();
+        this.setupTheme();
+        this.setupResumePlayback();
         this.loadSettings();
         this.loadLibraryInfo();
         this.loadMedia();
@@ -138,6 +141,10 @@ class WatchApp {
     
     async loadMedia() {
         try {
+            // Show loading spinner
+            const grid = document.getElementById('mediaGrid');
+            this.showLoading(grid, 'Loading media...');
+            
             const params = new URLSearchParams({
                 limit: this.itemsPerPage,
                 offset: (this.currentPage - 1) * this.itemsPerPage
@@ -157,6 +164,14 @@ class WatchApp {
         } catch (error) {
             console.error('Error loading media:', error);
             this.showStatus('Error loading media', 'error');
+            // Show error in grid
+            const grid = document.getElementById('mediaGrid');
+            grid.innerHTML = `
+                <div class="error-message">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>Error loading media. Please try again.</p>
+                </div>
+            `;
         }
     }
     
@@ -189,22 +204,27 @@ class WatchApp {
     createMediaCard(media) {
         const typeClass = media.media_type === 'movie' ? 'movie' : 'tv_show';
         const typeIcon = media.media_type === 'movie' ? 'fas fa-film' : 'fas fa-tv';
-        const sizeMB = media.file_size ? (media.file_size / (1024 * 1024)).toFixed(1) : 'Unknown';
+        const fileSize = this.formatFileSize(media.file_size);
+        const resumePosition = this.getResumePosition(media.id);
+        const hasResume = resumePosition > 0;
         
         return `
             <div class="media-card" data-media-id="${media.id}">
                 <div class="media-poster">
                     <i class="${typeIcon}"></i>
+                    ${hasResume ? '<div class="resume-indicator"><i class="fas fa-play-circle"></i></div>' : ''}
                 </div>
                 <div class="media-info">
                     <h3 class="media-title">${this.escapeHtml(media.title || media.file_name)}</h3>
                     <div class="media-meta">
                         <span class="media-type ${typeClass}">${media.media_type}</span>
-                        <span>${sizeMB} MB</span>
+                        <span class="file-size">${fileSize}</span>
+                        ${hasResume ? `<span class="resume-text">Resume at ${Math.floor(resumePosition / 60)}:${(resumePosition % 60).toString().padStart(2, '0')}</span>` : ''}
                     </div>
                     <div class="media-actions">
                         <button class="btn btn-primary" onclick="app.playMedia(${media.id})">
-                            <i class="fas fa-play"></i> Play
+                            <i class="fas fa-${hasResume ? 'play-circle' : 'play'}"></i> 
+                            ${hasResume ? 'Resume' : 'Play'}
                         </button>
                         <button class="btn btn-secondary" onclick="app.streamMedia(${media.id})">
                             <i class="fas fa-download"></i> Stream
@@ -238,6 +258,21 @@ class WatchApp {
             
             playerTitle.textContent = media.title || media.file_name;
             mediaPlayer.src = `/api/stream/${mediaId}`;
+            
+            // Set resume position if available
+            const resumePosition = this.getResumePosition(mediaId);
+            if (resumePosition > 0) {
+                mediaPlayer.addEventListener('loadedmetadata', () => {
+                    mediaPlayer.currentTime = resumePosition;
+                }, { once: true });
+            }
+            
+            // Save current position every 5 seconds
+            mediaPlayer.addEventListener('timeupdate', () => {
+                if (mediaPlayer.currentTime > 5) { // Only save if watched for more than 5 seconds
+                    this.saveResumePosition(mediaId, mediaPlayer.currentTime);
+                }
+            });
             
             this.openModal('playerModal');
             
@@ -455,6 +490,174 @@ class WatchApp {
         } catch (error) {
             console.error('Error loading library info:', error);
         }
+    }
+    
+    // ===== QUICK WINS IMPLEMENTATION =====
+    
+    setupKeyboardShortcuts() {
+        document.addEventListener('keydown', (e) => {
+            // Don't trigger shortcuts when typing in inputs
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+                return;
+            }
+            
+            switch(e.code) {
+                case 'Space':
+                    e.preventDefault();
+                    this.togglePlayPause();
+                    break;
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    this.seekVideo(-10);
+                    break;
+                case 'ArrowRight':
+                    e.preventDefault();
+                    this.seekVideo(10);
+                    break;
+                case 'KeyF':
+                    e.preventDefault();
+                    this.toggleFullscreen();
+                    break;
+                case 'KeyM':
+                    e.preventDefault();
+                    this.toggleMute();
+                    break;
+                case 'Escape':
+                    this.closeAllModals();
+                    break;
+                case 'KeyS':
+                    if (e.ctrlKey || e.metaKey) {
+                        e.preventDefault();
+                        this.openSettings();
+                    }
+                    break;
+                case 'Slash':
+                    if (e.shiftKey) {
+                        e.preventDefault();
+                        this.toggleKeyboardHelp();
+                    }
+                    break;
+            }
+        });
+    }
+    
+    setupTheme() {
+        // Check for saved theme preference
+        const savedTheme = localStorage.getItem('watch-theme') || 'light';
+        this.applyTheme(savedTheme);
+        
+        // Create theme toggle button
+        this.createThemeToggle();
+    }
+    
+    createThemeToggle() {
+        const header = document.querySelector('.header');
+        const themeToggle = document.createElement('button');
+        themeToggle.id = 'themeToggle';
+        themeToggle.className = 'btn btn-secondary theme-toggle';
+        themeToggle.innerHTML = '<i class="fas fa-moon"></i>';
+        themeToggle.title = 'Toggle Dark/Light Theme';
+        themeToggle.addEventListener('click', () => this.toggleTheme());
+        
+        header.appendChild(themeToggle);
+    }
+    
+    toggleTheme() {
+        const currentTheme = document.body.classList.contains('dark-theme') ? 'dark' : 'light';
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        this.applyTheme(newTheme);
+        localStorage.setItem('watch-theme', newTheme);
+    }
+    
+    applyTheme(theme) {
+        document.body.classList.remove('light-theme', 'dark-theme');
+        document.body.classList.add(`${theme}-theme`);
+        
+        const themeToggle = document.getElementById('themeToggle');
+        if (themeToggle) {
+            themeToggle.innerHTML = theme === 'dark' ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+        }
+    }
+    
+    setupResumePlayback() {
+        // Load resume positions from localStorage
+        this.resumePositions = JSON.parse(localStorage.getItem('watch-resume-positions') || '{}');
+    }
+    
+    saveResumePosition(mediaId, position) {
+        this.resumePositions[mediaId] = position;
+        localStorage.setItem('watch-resume-positions', JSON.stringify(this.resumePositions));
+    }
+    
+    getResumePosition(mediaId) {
+        return this.resumePositions[mediaId] || 0;
+    }
+    
+    // Video player controls
+    togglePlayPause() {
+        const player = document.getElementById('mediaPlayer');
+        if (player) {
+            if (player.paused) {
+                player.play();
+            } else {
+                player.pause();
+            }
+        }
+    }
+    
+    toggleKeyboardHelp() {
+        const help = document.getElementById('keyboardShortcuts');
+        help.classList.toggle('show');
+    }
+    
+    seekVideo(seconds) {
+        const player = document.getElementById('mediaPlayer');
+        if (player) {
+            player.currentTime += seconds;
+        }
+    }
+    
+    toggleFullscreen() {
+        const player = document.getElementById('mediaPlayer');
+        if (player) {
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
+            } else {
+                player.requestFullscreen();
+            }
+        }
+    }
+    
+    toggleMute() {
+        const player = document.getElementById('mediaPlayer');
+        if (player) {
+            player.muted = !player.muted;
+        }
+    }
+    
+    closeAllModals() {
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.style.display = 'none';
+        });
+        document.body.style.overflow = 'auto';
+    }
+    
+    // Enhanced media card with file size formatting
+    formatFileSize(bytes) {
+        if (!bytes) return 'Unknown';
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(1024));
+        return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+    }
+    
+    // Loading spinner utility
+    showLoading(element, message = 'Loading...') {
+        element.innerHTML = `
+            <div class="loading-spinner">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>${message}</p>
+            </div>
+        `;
     }
 }
 
