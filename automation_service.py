@@ -654,4 +654,5 @@ class AutomationService:
             return False
 
 # Automation service instance
-automation_service = AutomationService()
+# Automation service instance - will be initialized in app.py
+automation_service = None

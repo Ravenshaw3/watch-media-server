@@ -774,4 +774,5 @@ class SmartHomeService:
             return []
 
 # Smart home service instance
-smart_home_service = SmartHomeService()
+# Smart home service instance - will be initialized in app.py
+smart_home_service = None

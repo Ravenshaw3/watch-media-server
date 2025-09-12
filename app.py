@@ -2307,6 +2307,15 @@ external_services_service = ExternalServicesService(DATABASE_PATH)
 smart_home_service = SmartHomeService(DATABASE_PATH)
 automation_service = AutomationService(DATABASE_PATH)
 
+# Update the global service instances in their modules
+import external_services_service as ess_module
+import smart_home_service as shs_module
+import automation_service as as_module
+
+ess_module.external_services_service = external_services_service
+shs_module.smart_home_service = smart_home_service
+as_module.automation_service = automation_service
+
 @socketio.on('connect')
 def handle_connect():
     """Handle client connection"""

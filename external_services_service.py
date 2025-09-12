@@ -742,5 +742,5 @@ class ExternalServicesService:
             logger.error(f"Error getting integration logs: {e}")
             return []
 
-# External services instance
-external_services_service = ExternalServicesService()
+# External services instance - will be initialized in app.py
+external_services_service = None
