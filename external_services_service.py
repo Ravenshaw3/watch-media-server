@@ -8,6 +8,39 @@ from datetime import datetime, timedelta
 import logging
 from urllib.parse import urlencode, parse_qs
 
+# Optional imports for integrations
+try:
+    import dropbox
+    DROPBOX_AVAILABLE = True
+except ImportError:
+    DROPBOX_AVAILABLE = False
+
+try:
+    from google.oauth2.credentials import Credentials
+    from google_auth_oauthlib.flow import Flow
+    from googleapiclient.discovery import build
+    GOOGLE_AVAILABLE = True
+except ImportError:
+    GOOGLE_AVAILABLE = False
+
+try:
+    import tweepy
+    TWITTER_AVAILABLE = True
+except ImportError:
+    TWITTER_AVAILABLE = False
+
+try:
+    import facebook
+    FACEBOOK_AVAILABLE = True
+except ImportError:
+    FACEBOOK_AVAILABLE = False
+
+try:
+    from telegram import Bot
+    TELEGRAM_AVAILABLE = True
+except ImportError:
+    TELEGRAM_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 class ExternalServicesService:

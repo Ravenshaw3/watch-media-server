@@ -6,8 +6,14 @@ import sqlite3
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 import logging
-import asyncio
-import aiohttp
+
+# Optional async imports
+try:
+    import asyncio
+    import aiohttp
+    ASYNC_AVAILABLE = True
+except ImportError:
+    ASYNC_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
