@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>Watch Media Server</Name>
-  <Repository>ravenshaw3/watch-media-server:latest</Repository>
+  <Repository>ravenshaw3/watch-media-server</Repository>
   <Registry>https://hub.docker.com</Registry>
   <Network>bridge</Network>
   <MyIP>192.168.1.100</MyIP>
@@ -42,11 +42,6 @@
       <ContainerDir>/media</ContainerDir>
       <Mode>ro</Mode>
     </Volume>
-    <Volume>
-      <HostDir>/mnt/user/appdata/watch/config</HostDir>
-      <ContainerDir>/app/config</ContainerDir>
-      <Mode>rw</Mode>
-    </Volume>
   </Data>
   <Environment>
     <Variable>
@@ -59,31 +54,6 @@
       <Mode/>
       <Name>MEDIA_LIBRARY_PATH</Name>
     </Variable>
-    <Variable>
-      <Value>false</Value>
-      <Mode/>
-      <Name>DEBUG</Name>
-    </Variable>
-    <Variable>
-      <Value>info</Value>
-      <Mode/>
-      <Name>LOG_LEVEL</Name>
-    </Variable>
-    <Variable>
-      <Value>true</Value>
-      <Mode/>
-      <Name>AUTO_SCAN</Name>
-    </Variable>
-    <Variable>
-      <Value>3600</Value>
-      <Mode/>
-      <Name>SCAN_INTERVAL</Name>
-    </Variable>
-    <Variable>
-      <Value>1080p</Value>
-      <Mode/>
-      <Name>MAX_RESOLUTION</Name>
-    </Variable>
   </Environment>
   <Labels>
     <Label>maintainer=Watch Media Server Team</Label>
@@ -94,11 +64,4 @@
   <Config Name="WebUI" Target="8080" Default="8080" Mode="tcp" Description="Web interface port (change if port 8080 is in use)" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
   <Config Name="Media Library" Target="/media" Default="/mnt/user/media" Mode="ro" Description="Path to your media library (Movies, TV Shows, etc.)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/media</Config>
   <Config Name="Data Directory" Target="/app/data" Default="/mnt/user/appdata/watch" Mode="rw" Description="Directory for database and application logs" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/watch</Config>
-  <Config Name="Config Directory" Target="/app/config" Default="/mnt/user/appdata/watch/config" Mode="rw" Description="Directory for configuration files (optional)" Type="Path" Display="always" Required="false" Mask="false">/mnt/user/appdata/watch/config</Config>
-  <Config Name="Timezone" Target="TZ" Default="UTC" Mode="" Description="Set your timezone (e.g., America/New_York, Europe/London)" Type="Variable" Display="always" Required="false" Mask="false">UTC</Config>
-  <Config Name="Debug Mode" Target="DEBUG" Default="false" Mode="" Description="Enable debug mode for troubleshooting" Type="Variable" Display="always" Required="false" Mask="false">false</Config>
-  <Config Name="Log Level" Target="LOG_LEVEL" Default="info" Mode="" Description="Set logging level (debug, info, warning, error)" Type="Variable" Display="always" Required="false" Mask="false">info</Config>
-  <Config Name="Auto Scan" Target="AUTO_SCAN" Default="true" Mode="" Description="Enable automatic library scanning" Type="Variable" Display="always" Required="false" Mask="false">true</Config>
-  <Config Name="Scan Interval" Target="SCAN_INTERVAL" Default="3600" Mode="" Description="Library scan interval in seconds (3600 = 1 hour)" Type="Variable" Display="always" Required="false" Mask="false">3600</Config>
-  <Config Name="Max Resolution" Target="MAX_RESOLUTION" Default="1080p" Mode="" Description="Maximum streaming resolution (720p, 1080p, 4k)" Type="Variable" Display="always" Required="false" Mask="false">1080p</Config>
 </Container>
