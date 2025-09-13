@@ -13,7 +13,7 @@
   <Category>MediaServer:Other</Category>
   <WebUI>http://[IP]:[PORT:8080]/</WebUI>
   <TemplateURL/>
-  <Icon>https://raw.githubusercontent.com/Ravenshaw3/watch-media-server/main/icon.png</Icon>
+  <Icon>https://raw.githubusercontent.com/Ravenshaw3/watch-media-server/main/static/images/icon.svg</Icon>
   <ExtraParams/>
   <PostArgs/>
   <CPUset/>
