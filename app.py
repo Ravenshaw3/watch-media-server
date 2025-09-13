@@ -1871,7 +1871,7 @@ def api_player_continue_watching():
 
 # External Services Integration
 @app.route('/api/integrations/external-services/auth-url/<service_name>', methods=['GET'])
-@jwt_required()
+@require_auth
 def get_external_service_auth_url(service_name):
     """Get OAuth authorization URL for external service"""
     try:
@@ -1892,7 +1892,7 @@ def get_external_service_auth_url(service_name):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/integrations/external-services/callback/<service_name>', methods=['GET'])
-@jwt_required()
+@require_auth
 def handle_external_service_callback(service_name):
     """Handle OAuth callback from external service"""
     try:
@@ -1917,7 +1917,7 @@ def handle_external_service_callback(service_name):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/integrations/external-services/connections', methods=['GET'])
-@jwt_required()
+@require_auth
 def get_external_service_connections():
     """Get user's external service connections"""
     try:
@@ -1947,7 +1947,7 @@ def get_external_service_connections():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/integrations/external-services/sync/<service_name>', methods=['POST'])
-@jwt_required()
+@require_auth
 def sync_external_service(service_name):
     """Sync with external service"""
     try:
@@ -1970,7 +1970,7 @@ def sync_external_service(service_name):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/integrations/external-services/share/<service_name>', methods=['POST'])
-@jwt_required()
+@require_auth
 def share_to_external_service(service_name):
     """Share media to external service"""
     try:
@@ -1999,7 +1999,7 @@ def share_to_external_service(service_name):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/integrations/external-services/webhooks', methods=['POST'])
-@jwt_required()
+@require_auth
 def create_webhook_subscription():
     """Create webhook subscription"""
     try:
@@ -2028,7 +2028,7 @@ def create_webhook_subscription():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/integrations/external-services/logs', methods=['GET'])
-@jwt_required()
+@require_auth
 def get_integration_logs():
     """Get integration logs"""
     try:
@@ -2047,7 +2047,7 @@ def get_integration_logs():
 
 # Smart Home Integration
 @app.route('/api/integrations/smart-home/devices', methods=['GET'])
-@jwt_required()
+@require_auth
 def get_smart_home_devices():
     """Get user's smart home devices"""
     try:
@@ -2065,7 +2065,7 @@ def get_smart_home_devices():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/integrations/smart-home/devices', methods=['POST'])
-@jwt_required()
+@require_auth
 def register_smart_home_device():
     """Register smart home device"""
     try:
@@ -2096,7 +2096,7 @@ def register_smart_home_device():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/integrations/smart-home/voice-command', methods=['POST'])
-@jwt_required()
+@require_auth
 def handle_voice_command():
     """Handle voice command from smart home device"""
     try:
@@ -2120,7 +2120,7 @@ def handle_voice_command():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/integrations/smart-home/home-assistant/control', methods=['POST'])
-@jwt_required()
+@require_auth
 def control_home_assistant_entity():
     """Control Home Assistant entity"""
     try:
@@ -2148,7 +2148,7 @@ def control_home_assistant_entity():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/integrations/smart-home/philips-hue/scene', methods=['POST'])
-@jwt_required()
+@require_auth
 def set_philips_hue_scene():
     """Set Philips Hue scene"""
     try:
@@ -2174,7 +2174,7 @@ def set_philips_hue_scene():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/integrations/smart-home/voice-history', methods=['GET'])
-@jwt_required()
+@require_auth
 def get_voice_command_history():
     """Get voice command history"""
     try:
@@ -2193,7 +2193,7 @@ def get_voice_command_history():
 
 # Automation
 @app.route('/api/integrations/automation/tasks', methods=['GET'])
-@jwt_required()
+@require_auth
 def get_automation_tasks():
     """Get automation tasks"""
     try:
@@ -2208,7 +2208,7 @@ def get_automation_tasks():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/integrations/automation/tasks', methods=['POST'])
-@jwt_required()
+@require_auth
 def create_automation_task():
     """Create automation task"""
     try:
@@ -2237,7 +2237,7 @@ def create_automation_task():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/integrations/automation/tasks/<int:task_id>/toggle', methods=['PUT'])
-@jwt_required()
+@require_auth
 def toggle_automation_task(task_id):
     """Toggle automation task"""
     try:
@@ -2258,7 +2258,7 @@ def toggle_automation_task(task_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/integrations/automation/tasks/<int:task_id>', methods=['DELETE'])
-@jwt_required()
+@require_auth
 def delete_automation_task(task_id):
     """Delete automation task"""
     try:
@@ -2276,7 +2276,7 @@ def delete_automation_task(task_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/integrations/automation/tasks/<int:task_id>/logs', methods=['GET'])
-@jwt_required()
+@require_auth
 def get_automation_task_logs(task_id):
     """Get automation task logs"""
     try:
