@@ -659,13 +659,7 @@ def api_trending():
     results = search_service.get_trending_media(days, limit)
     return jsonify(results)
 
-@app.route('/api/continue-watching')
-def api_continue_watching():
-    """Get continue watching list"""
-    limit = int(request.args.get('limit', 20))
-    
-    results = search_service.get_continue_watching(limit)
-    return jsonify(results)
+# Continue watching endpoint moved to authenticated section below
 
 @app.route('/api/recommendations/<int:media_id>')
 def api_recommendations(media_id):
@@ -1863,8 +1857,8 @@ def api_playback_history():
 @app.route('/api/player/continue-watching')
 @require_auth
 @monitor_performance
-def api_continue_watching():
-    """Get continue watching list"""
+def api_player_continue_watching():
+    """Get continue watching list from player service"""
     user_id = request.current_user['user_id']
     limit = int(request.args.get('limit', 20))
     
