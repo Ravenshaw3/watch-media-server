@@ -22,15 +22,15 @@ import subprocess
 import shutil
 
 # Import our new services
-from src.services.tmdb_service import TMDBService
-from src.services.subtitle_service import SubtitleService
-from src.services.search_service import SearchService
-from src.services.auth_service import AuthService, require_auth, require_admin
-from src.services.pwa_service import PWAService
-from src.services.transcoding_service import TranscodingService
+from tmdb_service import TMDBService
+from subtitle_service import SubtitleService
+from search_service import SearchService
+from auth_service import AuthService, require_auth, require_admin
+from pwa_service import PWAService
+from transcoding_service import TranscodingService
 # Import cache service with error handling
 try:
-    from src.services.cache_service import cache_service, cached, cache_invalidate, CacheKeys
+    from cache_service import cache_service, cached, cache_invalidate, CacheKeys
     CACHE_AVAILABLE = True
 except Exception as e:
     logger.warning(f"Cache service not available: {e}")
@@ -45,15 +45,15 @@ except Exception as e:
     class CacheKeys:
         MEDIA_LIST = "media_list"
         SEARCH_RESULTS = "search_results"
-from src.services.monitoring_service import performance_monitor, monitor_performance, track_active_requests
-from src.services.database_service import database_service
-from src.services.api_docs_service import api_docs_service
-from src.services.ui_components_service import ui_components_service
-from src.services.social_service import social_service
-from src.services.player_service import player_service
-from src.services.external_services_service import ExternalServicesService
-from src.services.smart_home_service import SmartHomeService
-from src.services.automation_service import AutomationService
+from monitoring_service import performance_monitor, monitor_performance, track_active_requests
+from database_service import database_service
+from api_docs_service import api_docs_service
+from ui_components_service import ui_components_service
+from social_service import social_service
+from player_service import player_service
+from external_services_service import ExternalServicesService
+from smart_home_service import SmartHomeService
+from automation_service import AutomationService
 
 # Configure logging
 logging.basicConfig(
@@ -87,34 +87,19 @@ if db_dir and not os.path.exists(db_dir):
     os.chmod(db_dir, stat.S_IRWXU | stat.S_IRWXG | stat.S_IROTH | stat.S_IXOTH)
 
 # Version information
-VERSION = "1.3.0"
-BUILD_DATE = "2025-09-14"
-BUILD_TIME = "21:45:00"
+VERSION = "1.0.0"
+BUILD_DATE = "2025-09-13"
 
 auth_service = AuthService(DATABASE_PATH)
-pwa_service = PWAService()
 app.performance_monitor = performance_monitor
 
 class MediaManager:
     def __init__(self):
-        # Read DATABASE_PATH from environment at instantiation time
-        self.db_path = os.environ.get('DATABASE_PATH', 'watch.db')
-        print(f"MediaManager __init__ called with db_path: {self.db_path}")
-        print(f"Environment DATABASE_PATH: {os.environ.get('DATABASE_PATH', 'NOT_SET')}")
+        self.db_path = DATABASE_PATH
         self.init_database()
     
     def init_database(self):
         """Initialize the SQLite database with required tables"""
-        print(f"Initializing database at: {self.db_path}")
-        print(f"Database directory exists: {os.path.exists(os.path.dirname(self.db_path))}")
-        print(f"Database file exists: {os.path.exists(self.db_path)}")
-        
-        # Ensure directory exists
-        db_dir = os.path.dirname(self.db_path)
-        if db_dir and not os.path.exists(db_dir):
-            os.makedirs(db_dir, exist_ok=True)
-            print(f"Created database directory: {db_dir}")
-        
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -203,9 +188,7 @@ class MediaManager:
             ('release_date', 'TEXT'),
             ('imdb_id', 'TEXT'),
             ('tmdb_id', 'INTEGER'),
-            ('created_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'),
-            ('file_mtime', 'REAL'),  # File modification time for incremental scanning
-            ('category', 'TEXT')  # Category based on folder structure
+            ('created_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
         ]
         
         for column_name, column_type in new_columns:
@@ -242,39 +225,6 @@ class MediaManager:
         conn.commit()
         conn.close()
     
-    def cleanup_duplicates(self):
-        """Remove duplicate entries from the database"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # Find duplicates based on file_path
-        cursor.execute('''
-            SELECT file_path, COUNT(*) as count 
-            FROM media_files 
-            GROUP BY file_path 
-            HAVING COUNT(*) > 1
-        ''')
-        
-        duplicates = cursor.fetchall()
-        if duplicates:
-            logger.info(f"Found {len(duplicates)} duplicate file paths")
-            
-            for file_path, count in duplicates:
-                # Keep the most recent entry (highest ID)
-                cursor.execute('''
-                    DELETE FROM media_files 
-                    WHERE file_path = ? AND id NOT IN (
-                        SELECT MAX(id) FROM media_files WHERE file_path = ?
-                    )
-                ''', (file_path, file_path))
-                
-                logger.info(f"Removed {count - 1} duplicate(s) for {file_path}")
-        else:
-            logger.info("No duplicates found in database")
-        
-        conn.commit()
-        conn.close()
-    
     def get_setting(self, key, default=None):
         """Get a setting value from the database"""
         conn = sqlite3.connect(self.db_path)
@@ -295,7 +245,7 @@ class MediaManager:
         conn.commit()
         conn.close()
     
-    def scan_media_library(self, incremental=True):
+    def scan_media_library(self):
         """Scan the media library for new files"""
         global SCAN_IN_PROGRESS
         if SCAN_IN_PROGRESS:
@@ -305,50 +255,14 @@ class MediaManager:
         library_path = self.get_setting('library_path', MEDIA_LIBRARY_PATH)
         supported_formats = self.get_setting('supported_formats', 'mp4,avi,mkv,mov,wmv,flv,webm').split(',')
         
-        scan_type = "incremental" if incremental else "full"
-        logger.info(f"Starting {scan_type} media library scan in: {library_path}")
+        logger.info(f"Starting media library scan in: {library_path}")
         
         try:
-            new_files = 0
-            modified_files = 0
-            skipped_files = 0
-            
-            # Define the specific media folders to scan
-            media_folders = ['Movies', 'TV Shows', 'Kids', 'Classic Movies', 'Holiday Movies', 'Music Videos']
-            
-            # Scan only the specific media folders
-            for folder in media_folders:
-                folder_path = os.path.join(library_path, folder)
-                if os.path.exists(folder_path):
-                    logger.info(f"Scanning folder: {folder_path}")
-                    for root, dirs, files in os.walk(folder_path):
-                        for file in files:
-                            if any(file.lower().endswith(f'.{fmt}') for fmt in supported_formats):
-                                file_path = os.path.join(root, file)
-                                
-                                if incremental:
-                                    # Check if file is new or modified
-                                    is_new_or_modified, status = self.is_file_new_or_modified(file_path)
-                                    
-                                    if is_new_or_modified:
-                                        self.add_media_file(file_path)
-                                        if status == "new":
-                                            new_files += 1
-                                        elif status == "modified":
-                                            modified_files += 1
-                                        logger.info(f"Processed {status} file: {file}")
-                                    else:
-                                        skipped_files += 1
-                                else:
-                                    # Full scan - process all files
-                                    self.add_media_file(file_path)
-                                    new_files += 1
-            
-            if incremental:
-                logger.info(f"Incremental scan completed: {new_files} new, {modified_files} modified, {skipped_files} unchanged")
-            else:
-                logger.info(f"Full scan completed: {new_files} files processed")
-                
+            for root, dirs, files in os.walk(library_path):
+                for file in files:
+                    if any(file.lower().endswith(f'.{fmt}') for fmt in supported_formats):
+                        file_path = os.path.join(root, file)
+                        self.add_media_file(file_path)
         except Exception as e:
             logger.error(f"Error scanning media library: {e}")
         finally:
@@ -360,7 +274,6 @@ class MediaManager:
         try:
             file_stat = os.stat(file_path)
             file_size = file_stat.st_size
-            file_mtime = file_stat.st_mtime
             
             # Calculate file hash
             file_hash = self.calculate_file_hash(file_path)
@@ -373,15 +286,14 @@ class MediaManager:
             
             cursor.execute('''
                 INSERT OR REPLACE INTO media_files 
-                (file_path, file_name, file_size, file_hash, file_mtime, media_type, title, year, 
-                 season, episode, duration, resolution, codec, metadata, category)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (file_path, file_name, file_size, file_hash, media_type, title, year, 
+                 season, episode, duration, resolution, codec, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 file_path,
                 os.path.basename(file_path),
                 file_size,
                 file_hash,
-                file_mtime,
                 metadata.get('type', 'unknown'),
                 metadata.get('title', ''),
                 metadata.get('year'),
@@ -390,8 +302,7 @@ class MediaManager:
                 metadata.get('duration'),
                 metadata.get('resolution'),
                 metadata.get('codec'),
-                json.dumps(metadata),
-                metadata.get('category', 'unknown')
+                json.dumps(metadata)
             ))
             
             conn.commit()
@@ -399,43 +310,6 @@ class MediaManager:
             
         except Exception as e:
             logger.error(f"Error adding media file {file_path}: {e}")
-    
-    def is_file_new_or_modified(self, file_path):
-        """Check if a file is new or has been modified since last scan"""
-        try:
-            file_stat = os.stat(file_path)
-            file_size = file_stat.st_size
-            file_mtime = file_stat.st_mtime
-            
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            # Check if file exists in database
-            cursor.execute('''
-                SELECT file_size, file_mtime FROM media_files 
-                WHERE file_path = ?
-            ''', (file_path,))
-            
-            result = cursor.fetchone()
-            conn.close()
-            
-            if result is None:
-                # File not in database - it's new
-                return True, "new"
-            
-            db_size, db_mtime = result
-            
-            # Check if file has been modified
-            if file_size != db_size or file_mtime != db_mtime:
-                return True, "modified"
-            
-            # File exists and hasn't changed
-            return False, "unchanged"
-            
-        except Exception as e:
-            logger.error(f"Error checking file status {file_path}: {e}")
-            # If we can't check, assume it needs to be processed
-            return True, "error"
     
     def calculate_file_hash(self, file_path):
         """Calculate MD5 hash of file"""
@@ -459,34 +333,10 @@ class MediaManager:
             'episode': None,
             'duration': None,
             'resolution': '',
-            'codec': '',
-            'category': 'unknown'
+            'codec': ''
         }
         
         try:
-            # Determine category and type based on folder structure
-            path_parts = file_path.split('/')
-            media_folder = None
-            
-            # Find the main media folder (Movies, TV Shows, Kids, etc.)
-            for part in path_parts:
-                if part in ['Movies', 'TV Shows', 'Kids', 'Classic Movies', 'Holiday Movies', 'Music Videos', 'Videos']:
-                    media_folder = part
-                    break
-            
-            if media_folder:
-                metadata['category'] = media_folder.lower().replace(' ', '_')
-                
-                # Set type based on folder
-                if media_folder in ['TV Shows']:
-                    metadata['type'] = 'tv_show'
-                elif media_folder in ['Kids']:
-                    metadata['type'] = 'kids'
-                elif media_folder in ['Music Videos']:
-                    metadata['type'] = 'music_video'
-                else:
-                    metadata['type'] = 'movie'
-
             # Use ffprobe to get media information
             cmd = [
                 'ffprobe', '-v', 'quiet', '-print_format', 'json',
@@ -515,183 +365,18 @@ class MediaManager:
                 
                 # Extract title from filename or metadata
                 filename = os.path.basename(file_path)
-                base_name = os.path.splitext(filename)[0]
+                metadata['title'] = os.path.splitext(filename)[0]
                 
-                # Try to clean up the filename to get a better title
-                title = self.clean_filename_for_title(base_name, file_path)
-                metadata['title'] = title
-                
-                # Override type detection based on filename patterns if not set by folder
-                if metadata['type'] == 'unknown':
-                    if any(keyword in filename.lower() for keyword in ['s01e01', 's1e1', 'season', 'episode']):
-                        metadata['type'] = 'tv_show'
-                        # Extract season and episode info
-                        season_episode = self.extract_season_episode(filename)
-                        if season_episode:
-                            metadata['season'] = season_episode.get('season')
-                            metadata['episode'] = season_episode.get('episode')
-                    else:
-                        metadata['type'] = 'movie'
-                
-                # Add placeholder artwork URLs (can be enhanced with TMDB integration later)
-                metadata['poster_url'] = f"/api/placeholder/poster/{metadata['type']}"
-                metadata['backdrop_url'] = f"/api/placeholder/backdrop/{metadata['type']}"
+                # Try to determine if it's a TV show or movie
+                if any(keyword in filename.lower() for keyword in ['s01e01', 's1e1', 'season', 'episode']):
+                    metadata['type'] = 'tv_show'
+                else:
+                    metadata['type'] = 'movie'
                 
         except Exception as e:
             logger.error(f"Error extracting metadata for {file_path}: {e}")
-            # Fallback metadata
-            filename = os.path.basename(file_path)
-            metadata['title'] = self.clean_filename_for_title(os.path.splitext(filename)[0])
-            metadata['type'] = 'movie'
-            metadata['poster_url'] = "/api/placeholder/poster/movie"
-            metadata['backdrop_url'] = "/api/placeholder/backdrop/movie"
         
         return metadata
-    
-    def clean_folder_name_for_title(self, folder_name):
-        """Clean folder name to create a better title"""
-        import re
-        
-        title = folder_name
-        
-        # Don't remove year patterns for movie titles - they're part of the title
-        # Just clean up quality indicators and formatting
-        
-        # Remove quality indicators
-        quality_patterns = [
-            r'\.\d{3,4}p',  # Remove resolution like .1080p
-            r'\.\d{3,4}k',  # Remove resolution like .4k
-            r'\.HDRip',     # Remove quality indicators
-            r'\.BRRip',
-            r'\.WEBRip',
-            r'\.BluRay',
-            r'\.DVDRip',
-            r'\.x264',
-            r'\.x265',
-            r'\.H264',
-            r'\.H265',
-        ]
-        
-        for pattern in quality_patterns:
-            title = re.sub(pattern, '', title, flags=re.IGNORECASE)
-        
-        # Replace underscores and dots with spaces, but keep dashes and parentheses
-        title = re.sub(r'[._]', ' ', title)
-        
-        # Remove file extensions that might have been included
-        title = re.sub(r'\s+(mkv|mp4|avi|mov|wmv|flv|webm)$', '', title, flags=re.IGNORECASE)
-        
-        # Clean up multiple spaces
-        title = re.sub(r'\s+', ' ', title).strip()
-        
-        return title
-    
-    def clean_filename_for_title(self, filename, file_path=None):
-        """Clean filename to create a better title"""
-        import re
-        
-        # Remove file extension
-        title = os.path.splitext(filename)[0]
-        
-        # If we have a file path, try to extract title from folder structure first
-        if file_path:
-            path_parts = file_path.split('/')
-            # Look for movie folder names that might contain the actual title
-            for part in path_parts:
-                if part in ['Movies', 'TV Shows', 'Kids', 'Classic Movies', 'Holiday Movies', 'Music Videos']:
-                    continue  # Skip the category folder
-                elif part and part != os.path.basename(file_path).split('.')[0]:
-                    # This might be a movie folder with the actual title
-                    folder_title = self.clean_folder_name_for_title(part)
-                    if folder_title and len(folder_title) > 3 and folder_title.lower() != 'media':
-                        return folder_title
-        
-        # Remove common video file patterns and metadata
-        patterns_to_remove = [
-            r'\[.*?\]',  # Remove brackets and content
-            r'\(.*?\)',  # Remove parentheses and content
-            r'_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_\d+',  # Remove timestamp patterns like _2025-05-20_14-44-59_784
-            r'_\d{4}-\d{2}-\d{2}',  # Remove date patterns like _2025-05-20
-            r'_\d{2}-\d{2}-\d{2}',  # Remove date patterns like _05-20-2025
-            r'_\d{4}',   # Remove year patterns like _2023
-            r'^\d+_',    # Remove numbers at the beginning
-            r'_\d+$',    # Remove trailing numbers
-            r'[Ss]\d{2}[Ee]\d{2}',  # Remove season/episode patterns
-            r'[Ss]\d{1}[Ee]\d{1}',  # Remove season/episode patterns
-            r'\.\d{3,4}p',  # Remove resolution like .1080p
-            r'\.\d{3,4}k',  # Remove resolution like .4k
-            r'\.HDRip',     # Remove quality indicators
-            r'\.BRRip',
-            r'\.WEBRip',
-            r'\.BluRay',
-            r'\.DVDRip',
-            r'\.x264',
-            r'\.x265',
-            r'\.H264',
-            r'\.H265',
-        ]
-        
-        for pattern in patterns_to_remove:
-            title = re.sub(pattern, '', title, flags=re.IGNORECASE)
-        
-        # Replace underscores, dots, and dashes with spaces
-        title = re.sub(r'[._-]', ' ', title)
-        
-        # Clean up multiple spaces
-        title = re.sub(r'\s+', ' ', title).strip()
-        
-        # If the title is just numbers or very short, try to make it more meaningful
-        if len(title) < 3 or title.isdigit():
-            # Try to extract meaningful parts
-            original = os.path.splitext(filename)[0]
-            
-            # Check if it's a timestamp-based filename (only for non-movie folders)
-            import re
-            timestamp_match = re.search(r'(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2}-\d{2})', original)
-            if timestamp_match and file_path and not any(folder in file_path for folder in ['Movies', 'TV Shows', 'Kids', 'Classic Movies', 'Holiday Movies']):
-                date_part = timestamp_match.group(1)
-                time_part = timestamp_match.group(2)
-                # Create a more meaningful title from the timestamp
-                try:
-                    from datetime import datetime
-                    date_obj = datetime.strptime(f"{date_part} {time_part}", "%Y-%m-%d %H-%M-%S")
-                    title = f"Recording from {date_obj.strftime('%B %d, %Y at %I:%M %p')}"
-                except:
-                    title = f"Recording from {date_part} at {time_part}"
-            elif 'movie' in original.lower():
-                title = 'Movie'
-            elif 'tv' in original.lower() or 'show' in original.lower():
-                title = 'TV Show'
-            elif 'video' in original.lower():
-                title = 'Video'
-            else:
-                # Try to extract any meaningful words
-                words = re.findall(r'[a-zA-Z]+', original)
-                if words:
-                    title = ' '.join(word.capitalize() for word in words[:3])
-                else:
-                    title = 'Media File'
-        
-        # Capitalize words properly
-        title = ' '.join(word.capitalize() for word in title.split())
-        
-        return title if title else 'Unknown Title'
-    
-    def extract_season_episode(self, filename):
-        """Extract season and episode numbers from filename"""
-        import re
-        
-        # Pattern for S01E01 or S1E1
-        pattern = r'[Ss](\d+)[Ee](\d+)'
-        match = re.search(pattern, filename)
-        
-        if match:
-            return {
-                'season': int(match.group(1)),
-                'episode': int(match.group(2))
-            }
-        
-        return None
     
     def get_media_files(self, media_type=None, limit=None, offset=0):
         """Get media files from database"""
@@ -730,32 +415,13 @@ class MediaManager:
         conn.commit()
         conn.close()
 
-# MediaManager will be initialized at the end of the file after environment is loaded
-media_manager = None
-
-def get_media_manager():
-    """Get the media manager instance, ensuring it's initialized"""
-    global media_manager
-    if media_manager is None:
-        print(f"get_media_manager() called - Environment DATABASE_PATH: {os.environ.get('DATABASE_PATH', 'NOT_SET')}")
-        print(f"All environment variables: {dict(os.environ)}")
-        media_manager = MediaManager()
-    return media_manager
+# Initialize media manager
+media_manager = MediaManager()
 
 @app.route('/')
 def index():
     """Main dashboard page"""
     return render_template('index.html')
-
-@app.route('/help')
-def help_page():
-    """Help and user guide page"""
-    return render_template('help.html')
-
-@app.route('/about')
-def about_page():
-    """About and authorship page"""
-    return render_template('about.html')
 
 
 @app.route('/api/scan', methods=['POST'])
@@ -766,34 +432,24 @@ def api_scan_library():
         try:
             SCAN_IN_PROGRESS = True
             
-            # Get scan type from request (default to incremental)
-            scan_type = request.json.get('scan_type', 'incremental') if request.json else 'incremental'
-            incremental = scan_type == 'incremental'
-            
             # Get current library path
-            library_path = get_media_manager().get_setting('library_path', MEDIA_LIBRARY_PATH)
+            library_path = media_manager.get_setting('library_path', MEDIA_LIBRARY_PATH)
             
-            scan_type_name = "incremental" if incremental else "full"
             socketio.emit('scan_status', {
                 'status': 'started',
-                'message': f'{scan_type_name.title()} library scan started in: {library_path}',
+                'message': f'Library scan started in: {library_path}',
                 'progress': 0,
-                'scan_directory': library_path,
-                'scan_type': scan_type_name
+                'scan_directory': library_path
             })
             
             # Count total files first
-            supported_formats = get_media_manager().get_setting('supported_formats', 'mp4,avi,mkv,mov,wmv,flv,webm').split(',')
+            supported_formats = media_manager.get_setting('supported_formats', 'mp4,avi,mkv,mov,wmv,flv,webm').split(',')
             total_files = 0
             processed_files = 0
-            new_files = 0
-            modified_files = 0
-            skipped_files = 0
             
             # Count files
             logger.info(f"Scanning directory: {library_path}")
             logger.info(f"Supported formats: {supported_formats}")
-            logger.info(f"Scan type: {scan_type_name}")
             
             if not os.path.exists(library_path):
                 logger.error(f"Media library path does not exist: {library_path}")
@@ -813,8 +469,7 @@ def api_scan_library():
                 'status': 'counting',
                 'message': f'Found {total_files} media files to scan',
                 'progress': 0,
-                'total_files': total_files,
-                'scan_type': scan_type_name
+                'total_files': total_files
             })
             
             # Scan files with progress updates
@@ -824,27 +479,10 @@ def api_scan_library():
                 for file in files:
                     if any(file.lower().endswith(f'.{fmt}') for fmt in supported_formats):
                         file_path = os.path.join(root, file)
+                        media_manager.add_media_file(file_path)
+                        processed_files += 1
                         
-                        if incremental:
-                            # Check if file is new or modified
-                            is_new_or_modified, status = get_media_manager().is_file_new_or_modified(file_path)
-                            
-                            if is_new_or_modified:
-                                get_media_manager().add_media_file(file_path)
-                                processed_files += 1
-                                if status == "new":
-                                    new_files += 1
-                                elif status == "modified":
-                                    modified_files += 1
-                            else:
-                                skipped_files += 1
-                        else:
-                            # Full scan - process all files
-                            get_media_manager().add_media_file(file_path)
-                            processed_files += 1
-                            new_files += 1
-                        
-                        progress = int((processed_files + skipped_files) / total_files * 100) if total_files > 0 else 0
+                        progress = int((processed_files / total_files) * 100) if total_files > 0 else 0
                         socketio.emit('scan_status', {
                             'status': 'scanning',
                             'message': f'Scanning {current_dir}: {file}',
@@ -853,28 +491,15 @@ def api_scan_library():
                             'total_files': total_files,
                             'current_file': file,
                             'current_directory': current_dir,
-                            'scan_directory': library_path,
-                            'scan_type': scan_type_name,
-                            'new_files': new_files,
-                            'modified_files': modified_files,
-                            'skipped_files': skipped_files
+                            'scan_directory': library_path
                         })
             
-            if incremental:
-                message = f'Incremental scan completed. {new_files} new, {modified_files} modified, {skipped_files} unchanged files.'
-            else:
-                message = f'Full scan completed. Processed {processed_files} files.'
-                
             socketio.emit('scan_complete', {
                 'status': 'success',
-                'message': message,
+                'message': f'Library scan completed. Processed {processed_files} files.',
                 'progress': 100,
                 'processed_files': processed_files,
-                'total_files': total_files,
-                'new_files': new_files,
-                'modified_files': modified_files,
-                'skipped_files': skipped_files,
-                'scan_type': scan_type_name
+                'total_files': total_files
             })
             
         except Exception as e:
@@ -898,7 +523,7 @@ def api_get_settings():
     """API endpoint to get settings"""
     settings = {}
     for key in ['library_path', 'auto_scan', 'scan_interval', 'supported_formats', 'transcode_enabled', 'max_resolution']:
-        settings[key] = get_media_manager().get_setting(key)
+        settings[key] = media_manager.get_setting(key)
     return jsonify(settings)
 
 @app.route('/api/settings', methods=['POST'])
@@ -906,7 +531,7 @@ def api_update_settings():
     """API endpoint to update settings"""
     data = request.get_json()
     for key, value in data.items():
-        get_media_manager().set_setting(key, str(value))
+        media_manager.set_setting(key, str(value))
     
     # If library path changed, trigger a rescan
     if 'library_path' in data:
@@ -924,339 +549,24 @@ def api_get_version():
         return jsonify({
             'version': VERSION,
             'build_date': BUILD_DATE,
-            'build_time': BUILD_TIME,
             'python_version': f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
-@app.route('/api/placeholder/poster/<media_type>')
-def api_placeholder_poster(media_type):
-    """Generate placeholder poster for media type"""
-    from flask import Response
-    import io
-    from PIL import Image, ImageDraw, ImageFont
-    
-    # Create a simple placeholder image
-    width, height = 300, 450
-    img = Image.new('RGB', (width, height), color='#2c3e50')
-    draw = ImageDraw.Draw(img)
-    
-    # Add icon based on media type
-    icon = "🎬" if media_type == 'movie' else "📺"
-    
-    try:
-        # Try to use a default font
-        font = ImageFont.load_default()
-    except:
-        font = None
-    
-    # Draw icon
-    bbox = draw.textbbox((0, 0), icon, font=font)
-    text_width = bbox[2] - bbox[0]
-    text_height = bbox[3] - bbox[1]
-    
-    x = (width - text_width) // 2
-    y = (height - text_height) // 2
-    
-    draw.text((x, y), icon, fill='white', font=font)
-    
-    # Save to bytes
-    img_io = io.BytesIO()
-    img.save(img_io, format='PNG')
-    img_io.seek(0)
-    
-    return Response(img_io.getvalue(), mimetype='image/png')
-
-@app.route('/api/placeholder/backdrop/<media_type>')
-def api_placeholder_backdrop(media_type):
-    """Generate placeholder backdrop for media type"""
-    from flask import Response
-    import io
-    from PIL import Image, ImageDraw, ImageFont
-    
-    # Create a simple placeholder image
-    width, height = 1280, 720
-    img = Image.new('RGB', (width, height), color='#34495e')
-    draw = ImageDraw.Draw(img)
-    
-    # Add icon based on media type
-    icon = "🎬" if media_type == 'movie' else "📺"
-    
-    try:
-        # Try to use a default font
-        font = ImageFont.load_default()
-    except:
-        font = None
-    
-    # Draw icon
-    bbox = draw.textbbox((0, 0), icon, font=font)
-    text_width = bbox[2] - bbox[0]
-    text_height = bbox[3] - bbox[1]
-    
-    x = (width - text_width) // 2
-    y = (height - text_height) // 2
-    
-    draw.text((x, y), icon, fill='white', font=font)
-    
-    # Save to bytes
-    img_io = io.BytesIO()
-    img.save(img_io, format='PNG')
-    img_io.seek(0)
-    
-    return Response(img_io.getvalue(), mimetype='image/png')
-
-@app.route('/api/media/<int:media_id>/poster')
-def api_media_poster(media_id):
-    """Get poster image for specific media"""
-    try:
-        conn = sqlite3.connect(DATABASE_PATH)
-        cursor = conn.cursor()
-        cursor.execute('SELECT file_path, poster_url, media_type FROM media_files WHERE id = ?', (media_id,))
-        result = cursor.fetchone()
-        conn.close()
-        
-        if result:
-            file_path, poster_url, media_type = result
-            
-            # First check if there's a specific poster_url
-            if poster_url and poster_url.startswith('http'):
-                # External URL - redirect to it
-                return redirect(poster_url)
-            elif poster_url and poster_url.startswith('/'):
-                # Local file path
-                if os.path.exists(poster_url):
-                    return send_file(poster_url)
-            
-            # Look for artwork files in the same directory as the media file
-            if file_path:
-                media_dir = os.path.dirname(file_path)
-                media_name = os.path.splitext(os.path.basename(file_path))[0]
-                
-                # Common poster/artwork file names to look for
-                poster_names = [
-                    f"{media_name}.jpg",
-                    f"{media_name}.jpeg", 
-                    f"{media_name}.png",
-                    f"{media_name}.webp",
-                    "poster.jpg",
-                    "poster.jpeg",
-                    "poster.png",
-                    "poster.webp",
-                    "cover.jpg",
-                    "cover.jpeg",
-                    "cover.png",
-                    "cover.webp",
-                    "folder.jpg",
-                    "folder.jpeg",
-                    "folder.png",
-                    "folder.webp"
-                ]
-                
-                for poster_name in poster_names:
-                    poster_path = os.path.join(media_dir, poster_name)
-                    if os.path.exists(poster_path):
-                        return send_file(poster_path)
-        
-        # Fallback to placeholder
-        return redirect(f'/api/placeholder/poster/{media_type or "movie"}')
-    except Exception as e:
-        logger.error(f"Error getting media poster: {e}")
-        return redirect('/api/placeholder/poster/movie')
-
-@app.route('/api/media/<int:media_id>/backdrop')
-def api_media_backdrop(media_id):
-    """Get backdrop image for specific media"""
-    try:
-        conn = sqlite3.connect(DATABASE_PATH)
-        cursor = conn.cursor()
-        cursor.execute('SELECT file_path, backdrop_url, media_type FROM media_files WHERE id = ?', (media_id,))
-        result = cursor.fetchone()
-        conn.close()
-        
-        if result:
-            file_path, backdrop_url, media_type = result
-            
-            # First check if there's a specific backdrop_url
-            if backdrop_url and backdrop_url.startswith('http'):
-                # External URL - redirect to it
-                return redirect(backdrop_url)
-            elif backdrop_url and backdrop_url.startswith('/'):
-                # Local file path
-                if os.path.exists(backdrop_url):
-                    return send_file(backdrop_url)
-            
-            # Look for backdrop files in the same directory as the media file
-            if file_path:
-                media_dir = os.path.dirname(file_path)
-                media_name = os.path.splitext(os.path.basename(file_path))[0]
-                
-                # Common backdrop/fanart file names to look for
-                backdrop_names = [
-                    f"{media_name}-backdrop.jpg",
-                    f"{media_name}-backdrop.jpeg",
-                    f"{media_name}-backdrop.png",
-                    f"{media_name}-backdrop.webp",
-                    f"{media_name}-fanart.jpg",
-                    f"{media_name}-fanart.jpeg",
-                    f"{media_name}-fanart.png",
-                    f"{media_name}-fanart.webp",
-                    "backdrop.jpg",
-                    "backdrop.jpeg",
-                    "backdrop.png",
-                    "backdrop.webp",
-                    "fanart.jpg",
-                    "fanart.jpeg",
-                    "fanart.png",
-                    "fanart.webp",
-                    "background.jpg",
-                    "background.jpeg",
-                    "background.png",
-                    "background.webp"
-                ]
-                
-                for backdrop_name in backdrop_names:
-                    backdrop_path = os.path.join(media_dir, backdrop_name)
-                    if os.path.exists(backdrop_path):
-                        return send_file(backdrop_path)
-        
-        # Fallback to placeholder
-        return redirect(f'/api/placeholder/backdrop/{media_type or "movie"}')
-    except Exception as e:
-        logger.error(f"Error getting media backdrop: {e}")
-        return redirect('/api/placeholder/backdrop/movie')
 
 @app.route('/api/scan/status')
 def api_scan_status():
     """API endpoint to get current scan status"""
     return jsonify({
         'scan_in_progress': SCAN_IN_PROGRESS,
-        'library_path': get_media_manager().get_setting('library_path', MEDIA_LIBRARY_PATH)
+        'library_path': media_manager.get_setting('library_path', MEDIA_LIBRARY_PATH)
     })
-
-@app.route('/api/cleanup', methods=['POST'])
-def api_cleanup_database():
-    """API endpoint to cleanup duplicate entries"""
-    try:
-        get_media_manager().cleanup_duplicates()
-        return jsonify({'status': 'success', 'message': 'Database cleanup completed'})
-    except Exception as e:
-        logger.error(f"Error during database cleanup: {e}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-@app.route('/api/cleanup/all', methods=['POST'])
-def api_cleanup_all_database():
-    """API endpoint to completely clean the database"""
-    try:
-        conn = sqlite3.connect(DATABASE_PATH)
-        cursor = conn.cursor()
-        
-        # Clear all media files
-        cursor.execute('DELETE FROM media_files')
-        
-        # Reset auto-increment counter
-        cursor.execute('DELETE FROM sqlite_sequence WHERE name="media_files"')
-        
-        conn.commit()
-        conn.close()
-        
-        logger.info("Database completely cleaned")
-        return jsonify({'status': 'success', 'message': 'Database completely cleaned'})
-    except Exception as e:
-        logger.error(f"Error during complete database cleanup: {e}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-@app.route('/api/database/browse')
-def api_browse_database():
-    """API endpoint to browse database contents"""
-    try:
-        conn = sqlite3.connect(DATABASE_PATH)
-        cursor = conn.cursor()
-        
-        # Get table info
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        tables = [row[0] for row in cursor.fetchall()]
-        
-        # Get media_files table structure
-        cursor.execute("PRAGMA table_info(media_files)")
-        columns = [{'name': row[1], 'type': row[2]} for row in cursor.fetchall()]
-        
-        # Get sample data
-        cursor.execute("SELECT * FROM media_files LIMIT 10")
-        sample_data = []
-        for row in cursor.fetchall():
-            sample_data.append(dict(zip([col['name'] for col in columns], row)))
-        
-        # Get counts by category
-        cursor.execute("SELECT category, COUNT(*) FROM media_files GROUP BY category")
-        category_counts = dict(cursor.fetchall())
-        
-        # Get counts by media_type
-        cursor.execute("SELECT media_type, COUNT(*) FROM media_files GROUP BY media_type")
-        type_counts = dict(cursor.fetchall())
-        
-        # Get unique file paths (first 20)
-        cursor.execute("SELECT DISTINCT file_path FROM media_files LIMIT 20")
-        unique_paths = [row[0] for row in cursor.fetchall()]
-        
-        conn.close()
-        
-        return jsonify({
-            'tables': tables,
-            'columns': columns,
-            'sample_data': sample_data,
-            'category_counts': category_counts,
-            'type_counts': type_counts,
-            'unique_paths': unique_paths,
-            'total_records': len(sample_data)
-        })
-    except Exception as e:
-        logger.error(f"Error browsing database: {e}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-@app.route('/api/database/query', methods=['POST'])
-def api_query_database():
-    """API endpoint to run custom database queries"""
-    try:
-        data = request.get_json()
-        query = data.get('query', '')
-        
-        if not query:
-            return jsonify({'status': 'error', 'message': 'No query provided'}), 400
-        
-        # Security: Only allow SELECT queries
-        if not query.strip().upper().startswith('SELECT'):
-            return jsonify({'status': 'error', 'message': 'Only SELECT queries are allowed'}), 400
-        
-        conn = sqlite3.connect(DATABASE_PATH)
-        cursor = conn.cursor()
-        
-        cursor.execute(query)
-        results = cursor.fetchall()
-        
-        # Get column names
-        column_names = [description[0] for description in cursor.description] if cursor.description else []
-        
-        # Convert to list of dictionaries
-        data_list = [dict(zip(column_names, row)) for row in results]
-        
-        conn.close()
-        
-        return jsonify({
-            'status': 'success',
-            'columns': column_names,
-            'data': data_list,
-            'count': len(data_list)
-        })
-    except Exception as e:
-        logger.error(f"Error executing query: {e}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/api/library/info')
 def api_library_info():
     """API endpoint to get library information"""
-    library_path = get_media_manager().get_setting('library_path', MEDIA_LIBRARY_PATH)
-    supported_formats = get_media_manager().get_setting('supported_formats', 'mp4,avi,mkv,mov,wmv,flv,webm').split(',')
+    library_path = media_manager.get_setting('library_path', MEDIA_LIBRARY_PATH)
+    supported_formats = media_manager.get_setting('supported_formats', 'mp4,avi,mkv,mov,wmv,flv,webm').split(',')
     
     # Count files in library
     total_files = 0
@@ -1276,30 +586,18 @@ def api_library_info():
     # Get media counts from database
     movies_count = 0
     tv_shows_count = 0
-    kids_count = 0
-    music_videos_count = 0
-    category_counts = {}
     
     try:
         conn = sqlite3.connect(DATABASE_PATH)
         cursor = conn.cursor()
         
-        # Count by media type
-        cursor.execute("SELECT COUNT(*) FROM media_files WHERE media_type = 'movie'")
+        # Count movies (files without episode information)
+        cursor.execute("SELECT COUNT(*) FROM media_files WHERE episode IS NULL OR episode = ''")
         movies_count = cursor.fetchone()[0]
         
-        cursor.execute("SELECT COUNT(*) FROM media_files WHERE media_type = 'tv_show'")
+        # Count TV shows (files with episode information)
+        cursor.execute("SELECT COUNT(*) FROM media_files WHERE episode IS NOT NULL AND episode != ''")
         tv_shows_count = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT COUNT(*) FROM media_files WHERE media_type = 'kids'")
-        kids_count = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT COUNT(*) FROM media_files WHERE media_type = 'music_video'")
-        music_videos_count = cursor.fetchone()[0]
-        
-        # Get category counts
-        cursor.execute("SELECT category, COUNT(*) FROM media_files WHERE category IS NOT NULL GROUP BY category")
-        category_counts = dict(cursor.fetchall())
         
         conn.close()
     except Exception as e:
@@ -1311,9 +609,6 @@ def api_library_info():
         'total_size_gb': round(total_size / (1024 * 1024 * 1024), 2),
         'movies_count': movies_count,
         'tv_shows_count': tv_shows_count,
-        'kids_count': kids_count,
-        'music_videos_count': music_videos_count,
-        'category_counts': category_counts,
         'supported_formats': supported_formats,
         'exists': os.path.exists(library_path)
     })
@@ -1330,12 +625,27 @@ def api_play_media(file_id):
     if result:
         file_path = result[0]
         if os.path.exists(file_path):
-            get_media_manager().update_play_count(file_id)
+            media_manager.update_play_count(file_id)
             return send_file(file_path)
     
     return jsonify({'error': 'File not found'}), 404
 
-# Removed duplicate streaming endpoint - using enhanced version below
+@app.route('/api/stream/<int:file_id>')
+def api_stream_media(file_id):
+    """API endpoint to stream media file"""
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT file_path FROM media_files WHERE id = ?', (file_id,))
+    result = cursor.fetchone()
+    conn.close()
+    
+    if result:
+        file_path = result[0]
+        if os.path.exists(file_path):
+            media_manager.update_play_count(file_id)
+            return send_file(file_path, as_attachment=False)
+    
+    return jsonify({'error': 'File not found'}), 404
 
 # ===== HIGH-IMPACT FEATURES API ENDPOINTS =====
 
@@ -1894,6 +1204,7 @@ def api_get_available_qualities(media_id):
 
 # Enhanced streaming endpoint with transcoding
 @app.route('/api/stream/<int:file_id>')
+@require_auth
 def api_stream_media_enhanced(file_id):
     """Enhanced streaming endpoint with quality selection"""
     quality = request.args.get('quality', '720p')
@@ -1911,85 +1222,31 @@ def api_stream_media_enhanced(file_id):
     
     file_path = result[0]
     
-    # Check for transcoded version (if transcoding service is available)
+    # Check for transcoded version
     if quality != 'original':
-        try:
-            if 'transcoding_service' in globals():
-                cached_path = transcoding_service.get_cached_transcode(file_id, quality)
-                if cached_path:
-                    file_path = cached_path
-                elif job_id:
-                    # Check if transcoding is complete
-                    status = transcoding_service.get_transcode_status(int(job_id))
-                    if status.get('status') == 'completed' and status.get('output_path'):
-                        file_path = status['output_path']
-                    else:
-                        return jsonify({
-                            'error': 'Transcoding in progress',
-                            'status': status.get('status'),
-                            'progress': status.get('progress', 0)
-                        }), 202
-        except:
-            # Continue with original file if transcoding service is not available
-            pass
+        cached_path = transcoding_service.get_cached_transcode(file_id, quality)
+        if cached_path:
+            file_path = cached_path
+        elif job_id:
+            # Check if transcoding is complete
+            status = transcoding_service.get_transcode_status(int(job_id))
+            if status.get('status') == 'completed' and status.get('output_path'):
+                file_path = status['output_path']
+            else:
+                return jsonify({
+                    'error': 'Transcoding in progress',
+                    'status': status.get('status'),
+                    'progress': status.get('progress', 0)
+                }), 202
     
     if os.path.exists(file_path):
-        # Record play (if authentication is available)
-        try:
-            if hasattr(request, 'current_user') and request.current_user:
-                user_id = request.current_user['user_id']
-                auth_service.record_play(user_id, file_id)
-        except:
-            # Continue without recording play if auth is not available
-            pass
+        # Record play
+        user_id = request.current_user['user_id']
+        auth_service.record_play(user_id, file_id)
         
-        # Update play count in media manager
-        get_media_manager().update_play_count(file_id)
-        
-        # Optimize streaming with range support and caching headers
-        return send_file(
-            file_path, 
-            as_attachment=False,
-            mimetype='video/mp4',  # Set proper MIME type
-            conditional=True,      # Enable conditional requests
-            etag=True,            # Enable ETag support
-            last_modified=True    # Enable Last-Modified support
-        )
+        return send_file(file_path, as_attachment=False)
     
     return jsonify({'error': 'File not found'}), 404
-
-@app.route('/api/stream/<int:file_id>')
-def api_stream_media_simple(file_id):
-    """Simple streaming endpoint for faster loading"""
-    try:
-        # Get media info
-        conn = sqlite3.connect(DATABASE_PATH)
-        cursor = conn.cursor()
-        cursor.execute('SELECT file_path FROM media_files WHERE id = ?', (file_id,))
-        result = cursor.fetchone()
-        conn.close()
-        
-        if not result:
-            return jsonify({'error': 'File not found'}), 404
-        
-        file_path = result[0]
-        
-        if os.path.exists(file_path):
-            # Update play count
-            get_media_manager().update_play_count(file_id)
-            
-            # Simple streaming with basic optimizations
-            return send_file(
-                file_path, 
-                as_attachment=False,
-                conditional=True,
-                etag=True
-            )
-        
-        return jsonify({'error': 'File not found'}), 404
-    except Exception as e:
-        logger.error(f"Error streaming media {file_id}: {e}")
-        return jsonify({'error': 'Streaming failed'}), 500
 
 # Admin endpoints
 @app.route('/api/admin/users')
@@ -3092,7 +2349,8 @@ def get_automation_task_logs(task_id):
         logger.error(f"Error getting automation task logs: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
-# Initialize services after database is ready
+# Initialize MediaManager and services after database is ready
+media_manager = MediaManager()
 search_service = SearchService(DATABASE_PATH)
 
 # Initialize integration services
@@ -3101,9 +2359,9 @@ smart_home_service = SmartHomeService(DATABASE_PATH)
 automation_service = AutomationService(DATABASE_PATH)
 
 # Update the global service instances in their modules
-import src.services.external_services_service as ess_module
-import src.services.smart_home_service as shs_module
-import src.services.automation_service as as_module
+import external_services_service as ess_module
+import smart_home_service as shs_module
+import automation_service as as_module
 
 ess_module.external_services_service = external_services_service
 shs_module.smart_home_service = smart_home_service
@@ -3123,11 +2381,10 @@ def handle_disconnect():
 def start_auto_scan():
     """Start automatic library scanning"""
     while True:
-        if get_media_manager().get_setting('auto_scan') == 'true':
-            # Use incremental scanning by default for auto-scan
-            get_media_manager().scan_media_library(incremental=True)
+        if media_manager.get_setting('auto_scan') == 'true':
+            media_manager.scan_media_library()
         
-        interval = int(get_media_manager().get_setting('scan_interval', '3600'))
+        interval = int(media_manager.get_setting('scan_interval', '3600'))
         time.sleep(interval)
 
 def main():

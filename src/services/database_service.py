@@ -137,8 +137,37 @@ class DatabaseService:
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
+                
+                # Check if tables exist before creating indexes
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                existing_tables = {row[0] for row in cursor.fetchall()}
+                
                 for index_sql in indexes:
-                    cursor.execute(index_sql)
+                    # Extract table name from index SQL
+                    table_name = None
+                    if 'media_files' in index_sql:
+                        table_name = 'media_files'
+                    elif 'user_watchlists' in index_sql:
+                        table_name = 'user_watchlists'
+                    elif 'user_play_history' in index_sql:
+                        table_name = 'user_play_history'
+                    elif 'user_recommendations' in index_sql:
+                        table_name = 'user_recommendations'
+                    elif 'transcoding_jobs' in index_sql:
+                        table_name = 'transcoding_jobs'
+                    elif 'transcoding_cache' in index_sql:
+                        table_name = 'transcoding_cache'
+                    elif 'saved_searches' in index_sql:
+                        table_name = 'saved_searches'
+                    elif 'subtitles' in index_sql:
+                        table_name = 'subtitles'
+                    
+                    # Only create index if table exists
+                    if table_name is None or table_name in existing_tables:
+                        cursor.execute(index_sql)
+                    else:
+                        logger.debug(f"Skipping index creation for {table_name} - table does not exist yet")
+                
                 conn.commit()
                 logger.info("Database indexes created successfully")
         except Exception as e:

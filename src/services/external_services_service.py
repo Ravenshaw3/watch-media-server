@@ -98,6 +98,7 @@ class ExternalServicesService:
                 last_run TIMESTAMP,
                 next_run TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                user_id INTEGER,
                 FOREIGN KEY (user_id) REFERENCES users (id)
             )
         ''')

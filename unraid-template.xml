@@ -1,0 +1,71 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>WatchMediaServer</Name>
+  <Repository>ravenshaw3/watch-media-server:latest</Repository>
+  <Registry>https://registry-1.docker.io/</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/ravenshaw3/watch-media-server</Support>
+  <Project>https://github.com/ravenshaw3/watch-media-server</Project>
+  <Overview>Watch Media Server - Netflix-style media streaming application for your personal media collection. Organize and stream your movies, TV shows, and other media content with a modern web interface.</Overview>
+  <Category>Media:Other</Category>
+  <WebUI>http://[IP]:[PORT:8081]/</WebUI>
+  <TemplateURL/>
+  <Icon>https://raw.githubusercontent.com/ravenshaw3/watch-media-server/main/icon.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled>1736899200</DateInstalled>
+  <DonateText/>
+  <DonateLink/>
+  <Description>Watch Media Server is a modern, Netflix-style media streaming application designed to organize and stream your personal media collection. Built with Python Flask and featuring a responsive web interface, it provides an intuitive way to manage and enjoy your movies, TV shows, and other media content.
+
+Key Features:
+- Netflix-style user interface
+- Automatic media library scanning
+- Smart categorization (Movies, TV Shows, Kids, Music Videos)
+- Real-time streaming with multiple format support
+- Responsive design for all devices
+- Dark/Light theme support
+- RESTful API for integration
+- Docker containerization
+
+Supported Formats: MP4, MKV, AVI, MOV, WMV, FLV, WebM
+
+Version: 1.3.0
+Build Date: 2025-09-14</Description>
+  <Networking>
+    <Mode>bridge</Mode>
+    <Publish>
+      <Port>
+        <HostPort>8081</HostPort>
+        <ContainerPort>8080</ContainerPort>
+        <Protocol>tcp</Protocol>
+      </Port>
+    </Publish>
+  </Networking>
+  <Data>
+    <Volume>
+      <HostDir>/mnt/user/media</HostDir>
+      <ContainerDir>/media</ContainerDir>
+      <Mode>rw</Mode>
+    </Volume>
+    <Volume>
+      <HostDir>/mnt/user/appdata/watch-media-server</HostDir>
+      <ContainerDir>/app/data</ContainerDir>
+      <Mode>rw</Mode>
+    </Volume>
+  </Data>
+  <Environment>
+    <Variable>
+      <Value>false</Value>
+      <Mode/>
+    </Variable>
+  </Environment>
+  <Labels/>
+  <Config Name="Media Library Path" Target="/media" Default="/mnt/user/media" Mode="rw" Description="Path to your media library containing Movies, TV Shows, Kids, and Music Videos folders" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/media</Config>
+  <Config Name="App Data Path" Target="/app/data" Default="/mnt/user/appdata/watch-media-server" Mode="rw" Description="Path for application data and database storage" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/watch-media-server</Config>
+  <Config Name="Web Port" Target="8081" Default="8081" Mode="tcp" Description="Web interface port" Type="Port" Display="always" Required="true" Mask="false">8081</Config>
+</Container>

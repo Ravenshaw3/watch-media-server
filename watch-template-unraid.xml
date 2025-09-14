@@ -1,0 +1,136 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>Watch Media Server</Name>
+  <Repository>ravenshaw3/watch-media-server:latest</Repository>
+  <Registry>https://hub.docker.com/</Registry>
+  <Network>bridge</Network>
+  <MyIP>192.168.254.14</MyIP>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/Ravenshaw3/watch-media-server</Support>
+  <Project>https://github.com/Ravenshaw3/watch-media-server</Project>
+  <Overview>Watch Media Server v1.0.0 - A modern, self-hosted media streaming and management platform with advanced features like transcoding, metadata management, user authentication, and real-time scanning with directory feedback.</Overview>
+  <Category>MediaServer:Other</Category>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <TemplateURL/>
+  <Icon>https://raw.githubusercontent.com/Ravenshaw3/watch-media-server/main/static/images/icon.svg</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled>1736784000</DateInstalled>
+  <DonateText/>
+  <DonateLink/>
+  <Description>Watch Media Server v1.0.0 is a comprehensive media streaming solution that provides:
+
+&#x2022; **Media Library Management**: Organize and manage your movie and TV show collections
+&#x2022; **Advanced Streaming**: High-quality video streaming with adaptive bitrate support
+&#x2022; **Transcoding**: On-the-fly video transcoding for optimal playback on any device
+&#x2022; **Metadata Integration**: Automatic metadata fetching from TMDB and other sources
+&#x2022; **User Authentication**: Secure user management with role-based access control
+&#x2022; **Search & Discovery**: Powerful search with filters for genre, year, rating, and more
+&#x2022; **Subtitle Support**: Automatic subtitle detection and management
+&#x2022; **Mobile Responsive**: Beautiful, responsive web interface that works on all devices
+&#x2022; **API Access**: RESTful API for integration with other applications
+&#x2022; **Real-time Scanning**: Live scan progress with directory feedback
+&#x2022; **Version Display**: Application version and build information
+&#x2022; **Enhanced UI**: Movies/TV shows count, scan status, and improved theme toggle
+&#x2022; **Docker Ready**: Easy deployment with Docker and Docker Compose
+&#x2022; **Refactored Codebase**: Clean, modular architecture for better maintainability
+
+Perfect for home media servers, small offices, or anyone who wants a Netflix-like experience with their own content.</Description>
+  <Networking>
+    <Mode>bridge</Mode>
+    <Publish>
+      <Port>
+        <HostPort>8080</HostPort>
+        <ContainerPort>8080</ContainerPort>
+        <Protocol>tcp</Protocol>
+      </Port>
+    </Publish>
+  </Networking>
+  <Data>
+    <Volume>
+      <HostDir>/mnt/user/media</HostDir>
+      <ContainerDir>/media</ContainerDir>
+      <Mode>rw</Mode>
+    </Volume>
+    <Volume>
+      <HostDir>/mnt/user/appdata/watch-media-server</HostDir>
+      <ContainerDir>/app/data</ContainerDir>
+      <Mode>rw</Mode>
+    </Volume>
+  </Data>
+  <Environment>
+    <Variable>
+      <Value>192.168.254.14</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>8080</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>watch-media-server</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>bridge</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>false</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>bash</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>false</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>https://github.com/Ravenshaw3/watch-media-server</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>https://github.com/Ravenshaw3/watch-media-server</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>Watch Media Server - A modern, self-hosted media streaming and management platform with advanced features like transcoding, metadata management, and user authentication.</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>MediaServer:Other</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>http://[IP]:[PORT:8080]/</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>https://raw.githubusercontent.com/Ravenshaw3/watch-media-server/main/static/images/icon.svg</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>DATABASE_PATH=/app/data/watch.db</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>MEDIA_LIBRARY_PATH=/media</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>CACHE_ENABLED=false</Value>
+      <Mode/>
+    </Variable>
+  </Environment>
+  <Labels/>
+  <Config Name="Database Path" Target="DATABASE_PATH" Default="/app/data/watch.db" Mode="" Description="Path to the SQLite database file" Type="Variable" Display="always" Required="true" Mask="false">/app/data/watch.db</Config>
+  <Config Name="Media Library Path" Target="MEDIA_LIBRARY_PATH" Default="/media" Mode="" Description="Path to your media library" Type="Variable" Display="always" Required="true" Mask="false">/media</Config>
+  <Config Name="Cache Enabled" Target="CACHE_ENABLED" Default="false" Mode="" Description="Enable Redis caching (requires Redis container)" Type="Variable" Display="always" Required="false" Mask="false">false</Config>
+  <Config Name="Media Library" Target="/media" Default="/mnt/user/media" Mode="rw" Description="Path to your media library" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/media</Config>
+  <Config Name="App Data" Target="/app/data" Default="/mnt/user/appdata/watch-media-server" Mode="rw" Description="Application data directory" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/watch-media-server</Config>
+  <Config Name="WebUI" Target="8080" Default="8080" Mode="tcp" Description="Web interface port" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+</Container>

@@ -1,0 +1,119 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>Watch Media Server</Name>
+  <Repository>ravenshaw3/watch-media-server:latest</Repository>
+  <Registry>https://hub.docker.com</Registry>
+  <Network>bridge</Network>
+  <MyIP>192.168.254.14</MyIP>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/Ravenshaw3/watch-media-server/issues</Support>
+  <Project>https://github.com/Ravenshaw3/watch-media-server</Project>
+  <Overview>🎬 Watch Media Server v1.0.0 - A comprehensive web-based media library management system with authentication, real-time scanning, and enhanced UI features.</Overview>
+  <Category>MediaServer:Other</Category>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <TemplateURL/>
+  <Icon>https://raw.githubusercontent.com/Ravenshaw3/watch-media-server/main/static/images/icon.svg</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled>1736784000</DateInstalled>
+  <DonateText>Support Watch Media Server Development</DonateText>
+  <DonateLink>https://github.com/Ravenshaw3/watch-media-server</DonateLink>
+  <Description>Watch Media Server v1.0.0 - A modern, feature-rich media library management system with web interface, user authentication, real-time scanning with directory feedback, movies/TV shows count display, and enhanced UI. Perfect for organizing and streaming your media collection.</Description>
+  <Networking>
+    <Mode>bridge</Mode>
+    <Publish>
+      <Port>
+        <HostPort>8080</HostPort>
+        <ContainerPort>8080</ContainerPort>
+        <Protocol>tcp</Protocol>
+      </Port>
+    </Publish>
+  </Networking>
+  <Data>
+    <Volume>
+      <HostDir>/mnt/user/media</HostDir>
+      <ContainerDir>/media</ContainerDir>
+      <Mode>rw</Mode>
+    </Volume>
+    <Volume>
+      <HostDir>/mnt/user/appdata/watch-media-server</HostDir>
+      <ContainerDir>/app/data</ContainerDir>
+      <Mode>rw</Mode>
+    </Volume>
+  </Data>
+  <Environment>
+    <Variable>
+      <Value>192.168.254.14</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>8080</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>watch-media-server</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>bridge</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>false</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>bash</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>false</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>https://github.com/Ravenshaw3/watch-media-server/issues</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>https://github.com/Ravenshaw3/watch-media-server</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>🎬 Watch Media Server v1.0.0 - A comprehensive web-based media library management system with authentication, real-time scanning, and enhanced UI features.</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>MediaServer:Other</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>http://[IP]:[PORT:8080]/</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>https://raw.githubusercontent.com/Ravenshaw3/watch-media-server/main/static/images/icon.svg</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>DATABASE_PATH=/app/data/watch.db</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>MEDIA_LIBRARY_PATH=/media</Value>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>CACHE_ENABLED=false</Value>
+      <Mode/>
+    </Variable>
+  </Environment>
+  <Labels/>
+  <Config Name="Database Path" Target="DATABASE_PATH" Default="/app/data/watch.db" Mode="" Description="Path to the SQLite database file" Type="Variable" Display="always" Required="true" Mask="false">/app/data/watch.db</Config>
+  <Config Name="Media Library Path" Target="MEDIA_LIBRARY_PATH" Default="/media" Mode="" Description="Path to your media library" Type="Variable" Display="always" Required="true" Mask="false">/media</Config>
+  <Config Name="Cache Enabled" Target="CACHE_ENABLED" Default="false" Mode="" Description="Enable Redis caching (requires Redis container)" Type="Variable" Display="always" Required="false" Mask="false">false</Config>
+  <Config Name="Media Library" Target="/media" Default="/mnt/user/media" Mode="rw" Description="Path to your media library" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/media</Config>
+  <Config Name="App Data" Target="/app/data" Default="/mnt/user/appdata/watch-media-server" Mode="rw" Description="Application data directory" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/watch-media-server</Config>
+  <Config Name="WebUI" Target="8080" Default="8080" Mode="tcp" Description="Web interface port" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+</Container>

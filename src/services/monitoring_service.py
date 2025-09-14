@@ -104,20 +104,27 @@ class PerformanceMonitor:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
-            cursor.execute('SELECT COUNT(*) FROM media_files')
-            media_count = cursor.fetchone()[0]
-            MEDIA_FILES_COUNT.set(media_count)
+            # Check if tables exist before querying
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='media_files'")
+            if cursor.fetchone():
+                cursor.execute('SELECT COUNT(*) FROM media_files')
+                media_count = cursor.fetchone()[0]
+                MEDIA_FILES_COUNT.set(media_count)
             
-            # Update users count
-            cursor.execute('SELECT COUNT(*) FROM users')
-            users_count = cursor.fetchone()[0]
-            USERS_COUNT.set(users_count)
+            # Check if users table exists
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+            if cursor.fetchone():
+                cursor.execute('SELECT COUNT(*) FROM users')
+                users_count = cursor.fetchone()[0]
+                USERS_COUNT.set(users_count)
             
-            # Update transcoding jobs
-            cursor.execute('SELECT status, COUNT(*) FROM transcoding_jobs GROUP BY status')
-            transcode_jobs = cursor.fetchall()
-            for status, count in transcode_jobs:
-                TRANSCODE_JOBS.labels(status=status).set(count)
+            # Check if transcoding_jobs table exists
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='transcoding_jobs'")
+            if cursor.fetchone():
+                cursor.execute('SELECT status, COUNT(*) FROM transcoding_jobs GROUP BY status')
+                transcode_jobs = cursor.fetchall()
+                for status, count in transcode_jobs:
+                    TRANSCODE_JOBS.labels(status=status).set(count)
             
             conn.close()
             

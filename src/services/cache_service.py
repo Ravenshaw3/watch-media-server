@@ -20,11 +20,16 @@ logger = logging.getLogger(__name__)
 
 class CacheService:
     def __init__(self, redis_url: str = None):
-        self.redis_url = redis_url or os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+        self.redis_url = redis_url or os.getenv('REDIS_URL')
         self.redis_client = None
         self.cache_enabled = os.getenv('CACHE_ENABLED', 'true').lower() == 'true' and REDIS_AVAILABLE
         self.default_ttl = int(os.getenv('CACHE_DEFAULT_TTL', '3600'))  # 1 hour
-        self.connect()
+        
+        # Don't try to connect if cache is disabled or no Redis URL is provided
+        if self.cache_enabled and self.redis_url and not self.redis_url.startswith('#'):
+            self.connect()
+        else:
+            logger.info("Caching disabled - Redis URL not configured or cache disabled")
     
     def connect(self):
         """Connect to Redis server"""
